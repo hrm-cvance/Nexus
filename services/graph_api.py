@@ -116,16 +116,6 @@ class GraphAPIClient:
             logger.error(f"Unexpected error: {e}")
             raise GraphAPIError(f"Unexpected error: {str(e)}")
 
-    def test_connection(self) -> bool:
-        """Test connection to Graph API"""
-        try:
-            self._make_request("GET", "/me")
-            logger.info("Graph API connection test successful")
-            return True
-        except Exception as e:
-            logger.error(f"Graph API connection test failed: {e}")
-            return False
-
     def search_users(self, query: str, search_type: SearchType = SearchType.DISPLAY_NAME) -> List[EntraUser]:
         """
         Search for users in Entra ID
@@ -246,35 +236,6 @@ class GraphAPIClient:
         except Exception as e:
             logger.error(f"Failed to get user groups: {e}")
             return []
-
-    def get_user_photo(self, user_id: str) -> Optional[bytes]:
-        """
-        Get user's profile photo
-
-        Args:
-            user_id: User's object ID
-
-        Returns:
-            Photo data as bytes, or None if no photo
-        """
-        logger.debug(f"Getting photo for user: {user_id}")
-
-        try:
-            url = f"{self.BASE_URL}/users/{user_id}/photo/$value"
-            headers = self._get_headers()
-
-            response = requests.get(url, headers=headers, timeout=10)
-
-            if response.status_code == 200:
-                logger.debug("Photo retrieved successfully")
-                return response.content
-            else:
-                logger.debug("No photo available for user")
-                return None
-
-        except Exception as e:
-            logger.debug(f"Could not retrieve photo: {e}")
-            return None
 
     def __repr__(self):
         return f"<GraphAPIClient connected={self.auth_service.is_authenticated()}>"

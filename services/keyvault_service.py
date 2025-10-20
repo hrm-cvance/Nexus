@@ -248,58 +248,6 @@ class KeyVaultService:
             logger.error(f"Key Vault connection test failed: {e}")
             return False
 
-    def list_available_vendors(self) -> List[str]:
-        """
-        List available vendors based on secrets in Key Vault
-
-        Returns:
-            List of vendor names that have credentials stored
-        """
-        logger.info("Listing available vendors in Key Vault")
-
-        try:
-            secret_properties = self.client.list_properties_of_secrets()
-
-            # Extract vendor names from secret names (format: {vendor}-{field})
-            vendors = set()
-            for secret in secret_properties:
-                if '-' in secret.name:
-                    vendor_name = secret.name.split('-')[0]
-                    vendors.add(vendor_name)
-
-            vendor_list = sorted(list(vendors))
-            logger.info(f"Found {len(vendor_list)} vendor(s) in Key Vault: {vendor_list}")
-            return vendor_list
-
-        except Exception as e:
-            logger.error(f"Failed to list vendors: {e}")
-            return []
-
-    def clear_cache(self):
-        """Clear the secret cache (useful for testing or forced refresh)"""
-        self._cache.clear()
-        logger.info("Key Vault secret cache cleared")
-
-    def get_status(self) -> Dict[str, any]:
-        """
-        Get current Key Vault status
-
-        Returns:
-            Dict with status information
-        """
-        auth_method = "Unknown"
-        if isinstance(self.credential, AzureCliCredential):
-            auth_method = "Azure CLI"
-        elif isinstance(self.credential, DefaultAzureCredential):
-            auth_method = "DefaultAzureCredential"
-
-        return {
-            'connected': True,
-            'vault_url': self.vault_url,
-            'cached_secrets': len(self._cache),
-            'auth_method': auth_method
-        }
-
     def __repr__(self):
         return f"<KeyVaultService {self.vault_url}>"
 

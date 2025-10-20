@@ -155,23 +155,6 @@ class AuthService:
             return self.current_account.get("username")
         return None
 
-    def refresh_token(self, scopes: List[str]) -> bool:
-        """
-        Attempt to refresh authentication token
-
-        Args:
-            scopes: List of permission scopes
-
-        Returns:
-            True if refresh successful, False otherwise
-        """
-        try:
-            token = self.get_token_silent(scopes)
-            return token is not None
-        except Exception as e:
-            logger.error(f"Token refresh failed: {str(e)}")
-            return False
-
     def __repr__(self):
         username = self.get_current_username() or "Not signed in"
         return f"<AuthService {username}>"

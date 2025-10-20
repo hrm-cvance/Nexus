@@ -57,19 +57,6 @@ class VendorField:
 
 
 @dataclass
-class VendorCredentials:
-    """Vendor login credentials (retrieved from Azure Key Vault)"""
-    login_url: str
-    username: str
-    password: str
-    keyvault_prefix: str  # Prefix for Key Vault secret names
-
-    # Additional auth fields (optional)
-    mfa_method: Optional[str] = None
-    auth_notes: Optional[str] = None
-
-
-@dataclass
 class PasswordRules:
     """Password complexity rules for vendor"""
     length: int = 16
@@ -107,7 +94,6 @@ class VendorConfig:
     entra_group_name: Optional[str] = None
     entra_group_id: Optional[str] = None
     fields: List[VendorField] = field(default_factory=list)
-    credentials: Optional[VendorCredentials] = None
     password_rules: Optional[PasswordRules] = None
     automation_module: Optional[str] = None
     enabled: bool = True
@@ -115,58 +101,6 @@ class VendorConfig:
     # UI state
     is_selected: bool = False
     is_auto_detected: bool = False
-
-    @classmethod
-    def from_config_file(cls, config: Dict, mapping: Dict = None) -> 'VendorConfig':
-        """
-        Create VendorConfig from configuration file
-
-        Args:
-            config: Vendor configuration dictionary
-            mapping: Optional vendor mapping dictionary
-
-        Returns:
-            VendorConfig instance
-        """
-        vendor_info = config.get('vendor', {})
-        fields_config = config.get('fields', [])
-        password_rules_config = config.get('password_rules', {})
-        credentials_config = config.get('credentials', {})
-        entra_mapping = config.get('entra_mapping', {})
-
-        # Parse fields
-        fields = [VendorField.from_config(f) for f in fields_config]
-
-        # Parse password rules
-        password_rules = PasswordRules.from_config(password_rules_config) if password_rules_config else None
-
-        # Build vendor config
-        vendor_config = cls(
-            name=vendor_info.get('name', ''),
-            display_name=vendor_info.get('display_name', ''),
-            logo_path=vendor_info.get('logo'),
-            entra_group_name=entra_mapping.get('group_name'),
-            entra_group_id=entra_mapping.get('group_id'),
-            fields=fields,
-            password_rules=password_rules,
-            enabled=True
-        )
-
-        # Add mapping info if provided
-        if mapping:
-            vendor_config.entra_group_name = mapping.get('entra_group_name')
-            vendor_config.entra_group_id = mapping.get('entra_group_id')
-            vendor_config.automation_module = mapping.get('automation_module')
-            vendor_config.enabled = mapping.get('enabled', True)
-
-        return vendor_config
-
-    def get_field(self, field_name: str) -> Optional[VendorField]:
-        """Get a specific field by name"""
-        for field in self.fields:
-            if field.name == field_name:
-                return field
-        return None
 
     def __repr__(self):
         return f"<VendorConfig {self.display_name} (enabled={self.enabled})>"
