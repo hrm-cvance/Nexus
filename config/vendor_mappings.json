@@ -9,11 +9,21 @@
       "vendor_config": "Vendors/AccountChek/config.json",
       "automation_module": "automation.vendors.accountchek",
       "enabled": true
+    },
+    {
+      "entra_group_name": "BankVOD_Users",
+      "entra_group_id": "",
+      "vendor_name": "BankVOD",
+      "vendor_display_name": "Bank VOD",
+      "vendor_logo": "Vendors/BankVOD/logo.png",
+      "vendor_config": "Vendors/BankVOD/config.json",
+      "automation_module": "automation.vendors.bankvod",
+      "enabled": true
     }
   ],
   "metadata": {
-    "version": "1.0",
-    "last_updated": "2025-10-15",
+    "version": "1.1",
+    "last_updated": "2025-10-20",
     "notes": "Group-to-Vendor mappings for automatic vendor detection"
   }
 }

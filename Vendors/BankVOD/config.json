@@ -1,0 +1,16 @@
+{
+  "_comment": "All credentials are stored in Azure Key Vault. See keyvault_secrets.md for secret names.",
+  "vendor": {
+    "name": "BankVOD",
+    "display_name": "Bank VOD",
+    "keyvault_secrets": {
+      "login_url": "bankvod-login-url",
+      "login_email": "bankvod-login-email",
+      "login_password": "bankvod-login-password",
+      "newuser_password": "bankvod-newuser-password"
+    }
+  },
+  "defaults": {
+    "mustChangePassword": false
+  }
+}
