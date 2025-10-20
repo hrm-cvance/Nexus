@@ -1,0 +1,188 @@
+# Nexus - Git Ignore File
+# Prevents sensitive data and temporary files from being committed
+
+# ==============================================================================
+# SENSITIVE DATA - NEVER COMMIT
+# ==============================================================================
+
+# User AppData directory (contains user-specific configs and logs)
+%APPDATA%/
+
+# Azure Key Vault secrets (if ever stored locally)
+*.key
+*.pem
+*.pfx
+*.p12
+secrets/
+credentials/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# User settings (may contain personal preferences)
+config/user_settings.json
+
+# ==============================================================================
+# PYTHON
+# ==============================================================================
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ==============================================================================
+# LOGS & TEMPORARY FILES
+# ==============================================================================
+
+# Log files
+logs/
+*.log
+*.log.*
+
+# Screenshots (may contain sensitive data)
+screenshots/
+*.png
+*.jpg
+*.jpeg
+*.gif
+!Vendors/*/logo.png
+!docs/*.png
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Desktop screenshots from automation
+Desktop/*.png
+
+# ==============================================================================
+# BROWSERS & PLAYWRIGHT
+# ==============================================================================
+
+# Playwright browsers
+browsers/
+.playwright/
+playwright-report/
+test-results/
+
+# Chrome/Edge profiles
+*.crx
+*.xpi
+
+# ==============================================================================
+# WINDOWS
+# ==============================================================================
+
+# Windows thumbnail cache
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+
+# Windows folder config
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Windows shortcuts
+*.lnk
+
+# ==============================================================================
+# PROJECT-SPECIFIC
+# ==============================================================================
+
+# Cache files
+.cache/
+*.cache
+
+# Node modules (if ever used for tooling)
+node_modules/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.backup
+backup/
+
+# Testing data
+test_output/
+test_data/
+
+# ==============================================================================
+# KEEP THESE FILES (NEGATION PATTERNS)
+# ==============================================================================
+
+# Keep vendor logos
+!Vendors/*/logo.png
+
+# Keep documentation images
+!docs/images/*.png
+
+# Keep example configs (templates)
+!config/app_config.json.example
+
+# Keep README images
+!README_images/
+nul

@@ -1,0 +1,17 @@
+{
+  "_comment": "All credentials are stored in Azure Key Vault. See keyvault_secrets.md for secret names.",
+  "vendor": {
+    "name": "AccountChek",
+    "display_name": "AccountChek Verifier",
+    "keyvault_secrets": {
+      "login_url": "accountchek-login-url",
+      "login_email": "accountchek-login-email",
+      "login_password": "accountchek-login-password",
+      "newuser_password": "accountchek-newuser-password"
+    }
+  },
+  "defaults": {
+    "region": "Corporate",
+    "mustChangePassword": true
+  }
+}

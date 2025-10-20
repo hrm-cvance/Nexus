@@ -1,0 +1,36 @@
+# Nexus - Automated Vendor Account Provisioning
+# Requirements File
+
+# GUI Framework
+customtkinter==5.2.0
+
+# Browser Automation
+playwright==1.40.0
+
+# Microsoft Authentication (Delegated Permissions)
+msal==1.25.0
+
+# Azure Key Vault
+azure-keyvault-secrets==4.7.0
+azure-identity==1.15.0
+
+# HTTP Requests
+requests==2.31.0
+
+# Environment Variables (Development only)
+python-dotenv==1.0.0
+
+# Image Processing
+Pillow==10.1.0
+
+# PDF Generation
+reportlab==4.0.7
+
+# Date/Time utilities
+python-dateutil==2.8.2
+
+# JSON schema validation
+jsonschema==4.20.0
+
+# Logging enhancements
+colorlog==6.8.0

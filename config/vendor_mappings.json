@@ -1,0 +1,19 @@
+{
+  "mappings": [
+    {
+      "entra_group_name": "AccountChek_Users",
+      "entra_group_id": "",
+      "vendor_name": "AccountChek",
+      "vendor_display_name": "AccountChek Verifier",
+      "vendor_logo": "Vendors/AccountChek/logo.png",
+      "vendor_config": "Vendors/AccountChek/config.json",
+      "automation_module": "automation.vendors.accountchek",
+      "enabled": true
+    }
+  ],
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2025-10-15",
+    "notes": "Group-to-Vendor mappings for automatic vendor detection"
+  }
+}

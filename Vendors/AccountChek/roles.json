@@ -1,0 +1,34 @@
+{
+  "roles": [
+    {
+      "value": "BranchAdmin",
+      "description": "Branch Administrator - manages users at branch level",
+      "keywords": ["branch manager", "branch admin", "office manager"]
+    },
+    {
+      "value": "CorporateAdmin",
+      "description": "Corporate Administrator - manages users at corporate level",
+      "keywords": ["corporate admin", "system admin", "administrator", "it admin"]
+    },
+    {
+      "value": "Operations",
+      "description": "Operations role - operational staff",
+      "keywords": ["operations", "ops manager", "operations manager", "operations specialist"]
+    },
+    {
+      "value": "Processor",
+      "description": "Processor role - processes loan applications",
+      "keywords": ["processor", "loan processor", "mortgage processor", "processing"]
+    },
+    {
+      "value": "RegionAdmin",
+      "description": "Regional Administrator - manages users at regional level",
+      "keywords": ["regional admin", "region manager", "regional manager", "regional director"]
+    },
+    {
+      "value": "User",
+      "description": "Standard User - basic access level",
+      "keywords": ["user", "loan officer", "loan originator", "account manager", "specialist", "coordinator", "assistant"]
+    }
+  ]
+}

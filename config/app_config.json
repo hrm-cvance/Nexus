@@ -1,0 +1,36 @@
+{
+  "app": {
+    "name": "Nexus",
+    "version": "1.0.0",
+    "author": "IT Department"
+  },
+  "microsoft": {
+    "tenant_id": "615a646c-2d45-4a1b-b3c6-5970189da9c4",
+    "client_id": "4b2f7ff8-2ba2-49cb-b039-87de0bc6878f",
+    "redirect_uri": "http://localhost:8400",
+    "scopes": [
+      "User.Read.All",
+      "GroupMember.Read.All",
+      "Group.Read.All"
+    ]
+  },
+  "azure_keyvault": {
+    "vault_url": "https://hrm-nexus-credentials.vault.azure.net/",
+    "secret_naming_convention": "{vendor}-{field}"
+  },
+  "settings": {
+    "timeout_seconds": 120,
+    "headless_mode": false,
+    "log_level": "INFO",
+    "auto_screenshot": true,
+    "screenshot_directory": "screenshots",
+    "log_directory": "logs"
+  },
+  "paths": {
+    "appdata_root": "%APPDATA%\\Nexus",
+    "config_dir": "config",
+    "logs_dir": "logs",
+    "screenshots_dir": "screenshots",
+    "browsers_dir": "browsers"
+  }
+}
