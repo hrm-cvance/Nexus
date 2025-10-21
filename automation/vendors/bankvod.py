@@ -130,9 +130,19 @@ class BankVODAutomation:
                     return result
 
             result['messages'].append(f"✓ User created with auto-generated password: {self.auto_generated_password}")
-            logger.info(f"User created successfully, now updating password to HRM default")
+            logger.info(f"User created successfully")
 
-            # Step 2: Search for the user and update password to HRM default
+            # Mark as successful after initial creation
+            result['success'] = True
+            result['messages'].append(f"✓ Successfully created BankVOD account for {user.display_name}")
+            logger.info(f"Successfully completed BankVOD account creation for {user.display_name}")
+
+            # TODO: Step 2 - Update password to HRM default (currently disabled for testing)
+            # Uncomment below to enable password update step:
+            """
+            logger.info(f"Now updating password to HRM default")
+
+            # Search for the user and update password to HRM default
             await self._search_for_user(user_data['email'])
             result['messages'].append("✓ Found newly created user")
 
@@ -152,12 +162,12 @@ class BankVODAutomation:
             update_result = await self._wait_for_success()
 
             if update_result['success']:
-                result['success'] = True
-                result['messages'].append(f"✓ Successfully created BankVOD account for {user.display_name}")
-                logger.info(f"Successfully completed BankVOD account creation for {user.display_name}")
+                result['messages'].append(f"✓ Password updated to HRM default")
+                logger.info(f"Successfully updated password to HRM default")
             else:
                 result['errors'].append(f"✗ Password update failed: {update_result['message']}")
                 logger.error(f"Password update failed for {user.display_name}")
+            """
 
         except Exception as e:
             logger.error(f"Error during BankVOD automation: {e}")

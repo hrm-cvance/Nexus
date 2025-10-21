@@ -205,6 +205,8 @@ class AutomationStatusTab:
                 # Import and run vendor automation module
                 if vendor.name == "AccountChek":
                     await self._run_accountchek_automation(vendor)
+                elif vendor.name == "BankVOD":
+                    await self._run_bankvod_automation(vendor)
                 else:
                     # Unknown vendor
                     self._add_vendor_message(vendor.name, f"✗ Unknown vendor: {vendor.name}")
@@ -282,6 +284,60 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"AccountChek automation error: {e}")
+            self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
+            self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+    async def _run_bankvod_automation(self, vendor: VendorConfig):
+        """Run BankVOD automation"""
+        try:
+            # Import automation module
+            from automation.vendors.bankvod import provision_user
+
+            # Get config path
+            vendor_mappings = self.config_manager.get_enabled_vendors()
+            bankvod_mapping = next(
+                (m for m in vendor_mappings if m['vendor_name'] == 'BankVOD'),
+                None
+            )
+
+            if not bankvod_mapping:
+                raise Exception("BankVOD mapping not found in config")
+
+            # Build config path
+            config_dir = self.config_manager.project_root
+            config_path = config_dir / bankvod_mapping['vendor_config']
+
+            logger.info(f"Using config: {config_path}")
+
+            # Add status message
+            self._add_vendor_message(vendor.name, "Starting BankVOD automation...")
+
+            # Run automation (no API key needed for BankVOD)
+            result = await provision_user(self.current_user, str(config_path), api_key=None)
+
+            # Display results
+            logger.info(f"BankVOD result: {result}")
+
+            # Add messages
+            for msg in result.get('messages', []):
+                self._add_vendor_message(vendor.name, msg)
+
+            # Add warnings
+            for warning in result.get('warnings', []):
+                self._add_vendor_message(vendor.name, warning, color="orange")
+
+            # Add errors
+            for error in result.get('errors', []):
+                self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
+
+            # Update final status
+            if result['success']:
+                self._update_vendor_status(vendor.name, "success", "✓ Complete")
+            else:
+                self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        except Exception as e:
+            logger.error(f"BankVOD automation error: {e}")
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
