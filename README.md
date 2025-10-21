@@ -139,6 +139,7 @@ Each vendor requires secrets stored in Azure Key Vault:
 
 ### BankVOD Secrets
 - `bankvod-login-url` - Login page URL
+- `bankvod-login-account-id` - Company/Account ID (if required)
 - `bankvod-login-email` - Admin email
 - `bankvod-login-password` - Admin password
 - `bankvod-newuser-password` - Default password for new users

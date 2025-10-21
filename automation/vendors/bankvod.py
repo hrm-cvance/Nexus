@@ -234,6 +234,7 @@ class BankVODAutomation:
         # Get login credentials from Key Vault
         try:
             login_url = self.keyvault.get_vendor_credential('bankvod', 'login-url')
+            login_account_id = self.keyvault.get_vendor_credential('bankvod', 'login-account-id')
             login_email = self.keyvault.get_vendor_credential('bankvod', 'login-email')
             login_password = self.keyvault.get_vendor_credential('bankvod', 'login-password')
         except KeyVaultError as e:
@@ -245,7 +246,17 @@ class BankVODAutomation:
         await self.page.wait_for_load_state('networkidle')
 
         # Fill login form
-        await self.page.fill('input[type="email"], input[name="email"]', login_email)
+        # Account ID field (if present - try multiple selectors)
+        try:
+            await self.page.fill('input[name*="account"], input[placeholder*="Account"], input[id*="account"]', login_account_id, timeout=3000)
+            logger.info("Filled Account ID field")
+        except:
+            logger.debug("Account ID field not found - may not be required on this page")
+
+        # Email field
+        await self.page.fill('input[type="email"], input[name="email"], input[placeholder*="Email"]', login_email)
+
+        # Password field
         await self.page.fill('input[type="password"], input[name="password"]', login_password)
 
         # Click login button

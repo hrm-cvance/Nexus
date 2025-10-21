@@ -5,6 +5,7 @@
     "display_name": "Bank VOD",
     "keyvault_secrets": {
       "login_url": "bankvod-login-url",
+      "login_account_id": "bankvod-login-account-id",
       "login_email": "bankvod-login-email",
       "login_password": "bankvod-login-password",
       "newuser_password": "bankvod-newuser-password"
