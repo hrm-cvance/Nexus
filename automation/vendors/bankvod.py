@@ -255,22 +255,41 @@ class BankVODAutomation:
         await self.page.goto(login_url)
         await self.page.wait_for_load_state('networkidle')
 
-        # Fill login form
-        # Account ID field (if present - try multiple selectors)
+        # Fill login form using exact IDs from ASP.NET form
+
+        # Account Number field - ID: ContentPlaceHolder1_t_acct
         try:
-            await self.page.fill('input[name*="account"], input[placeholder*="Account"], input[id*="account"]', login_account_id, timeout=3000)
-            logger.info("Filled Account ID field")
-        except:
-            logger.debug("Account ID field not found - may not be required on this page")
+            await self.page.fill('#ContentPlaceHolder1_t_acct', login_account_id)
+            logger.info("Filled Account Number field")
+        except Exception as e:
+            logger.error(f"Account Number field error: {e}")
+            raise
 
-        # Email field
-        await self.page.fill('input[type="email"], input[name="email"], input[placeholder*="Email"]', login_email)
+        # Login/Email field - ID: ContentPlaceHolder1_t_email
+        try:
+            await self.page.fill('#ContentPlaceHolder1_t_email', login_email)
+            logger.info("Filled Login field")
+        except Exception as e:
+            logger.error(f"Login field error: {e}")
+            raise
 
-        # Password field
-        await self.page.fill('input[type="password"], input[name="password"]', login_password)
+        # Password field - ID: ContentPlaceHolder1_t_password
+        try:
+            await self.page.fill('#ContentPlaceHolder1_t_password', login_password)
+            logger.info("Filled Password field")
+        except Exception as e:
+            logger.error(f"Password field error: {e}")
+            raise
 
-        # Click login button
-        await self.page.click('button[type="submit"], input[type="submit"]')
+        # Click submit button (it's type="image", not type="submit")
+        # ID: ContentPlaceHolder1_b_login
+        try:
+            await self.page.click('#ContentPlaceHolder1_b_login')
+            logger.info("Clicked Submit button")
+        except Exception as e:
+            logger.error(f"Failed to click Submit button: {e}")
+            await self.page.screenshot(path=f'bankvod_login_error_{self.current_user.user_principal_name if self.current_user else "unknown"}.png')
+            raise
 
         # Wait for navigation
         await self.page.wait_for_load_state('networkidle')
@@ -295,92 +314,157 @@ class BankVODAutomation:
         logger.info("Authorized Users page loaded")
 
     async def _click_add_new_user(self):
-        """Click Add New Authorized User button"""
+        """Click Add New Authorized User button (opens a Telerik RadWindow)"""
         logger.info("Clicking Add New Authorized User button...")
 
-        # Look for button with text "Add New Authorized User"
-        await self.page.click('button:has-text("Add New Authorized User"), a:has-text("Add New Authorized User")')
+        # The button is an image with ID: ContentPlaceHolder1_lb_add_new
+        # It has onclick="openRadWindow(0);" which opens a Telerik RadWindow modal
 
-        # Wait for modal/form to appear
-        await asyncio.sleep(2)
-        await self.page.wait_for_selector('input[placeholder*="First"], input[name*="first"]', timeout=10000)
-        logger.info("New User modal opened")
+        # Click the button by ID (most reliable)
+        try:
+            await self.page.click('#ContentPlaceHolder1_lb_add_new')
+            logger.info("Clicked Add New User button by ID")
+        except Exception as e:
+            logger.error(f"Could not click Add New User button: {e}")
+            raise Exception("Could not find or click Add New Authorized User button")
+
+        # Wait for the Telerik RadWindow to appear
+        # RadWindows create an iframe for their content
+        logger.info("Waiting for RadWindow modal to appear...")
+        await asyncio.sleep(3)  # Give RadWindow time to initialize
+
+        # The RadWindow content is in an iframe
+        # We need to find the iframe and work with it
+        logger.info("Looking for RadWindow iframe...")
+
+        # Wait for iframe to be added to the page
+        try:
+            await self.page.wait_for_selector('iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]', timeout=10000)
+            logger.info("RadWindow iframe found")
+        except Exception as e:
+            logger.error(f"RadWindow iframe not found: {e}")
+            await self.page.screenshot(path='radwindow_not_found.png')
+            raise Exception("RadWindow modal did not open")
 
     async def _fill_user_form(self, user_data: Dict[str, Any], use_auto_password: bool = False):
         """
-        Fill the new user form
+        Fill the new user form in the RadWindow modal popup
 
         Args:
             user_data: User data dictionary
-            use_auto_password: If True, use "Auto generated password" (initial creation)
-                             If False, use default_password (update)
+            use_auto_password: If True, leave password blank for auto-generation
+                             If False, use default_password
+
+        The form is inside a Telerik RadWindow iframe with fields:
+        - First Name (text input)
+        - Last Name (text input)
+        - Email (text input)
+        - Password (text input)
+        - Cost Center/Acct Code (text input)
+        - Comments (textarea)
         """
-        logger.info("Filling user form...")
+        logger.info("Filling user form in RadWindow iframe...")
 
-        # Fill text fields
-        # First Name
-        try:
-            await self.page.fill('input[placeholder*="First Name"], input[name*="firstName"]', user_data['firstName'])
-        except:
-            await self.page.fill('input[name*="first"]', user_data['firstName'])
+        # Get the RadWindow iframe
+        iframe_element = await self.page.query_selector('iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]')
+        if not iframe_element:
+            logger.error("Could not find RadWindow iframe")
+            raise Exception("RadWindow iframe not found")
 
-        # Last Name
-        try:
-            await self.page.fill('input[placeholder*="Last Name"], input[name*="lastName"]', user_data['lastName'])
-        except:
-            await self.page.fill('input[name*="last"]', user_data['lastName'])
+        # Get the iframe's content frame
+        iframe = await iframe_element.content_frame()
+        if not iframe:
+            logger.error("Could not access iframe content")
+            raise Exception("Could not access RadWindow iframe content")
 
-        # Email
-        try:
-            await self.page.fill('input[placeholder*="Email"], input[type="email"]', user_data['email'])
-        except:
-            await self.page.fill('input[name*="email"]', user_data['email'])
+        logger.info("Accessing RadWindow iframe content...")
 
-        # Password field
-        if use_auto_password:
-            # For initial creation, type "Auto generated password"
-            password_text = "Auto generated password"
-            self.auto_generated_password = password_text  # Store for logging
-            logger.info("Using auto-generated password for initial creation")
+        # Wait for form to be loaded in the iframe
+        await iframe.wait_for_selector('input[type="text"], textarea', timeout=10000)
+
+        # Get all visible text input fields in the iframe
+        text_inputs = await iframe.query_selector_all('input[type="text"]:visible, input[type="text"]')
+        logger.info(f"Found {len(text_inputs)} text input fields in RadWindow")
+
+        # The form has inputs in this order (based on screenshot):
+        # 0 = First Name
+        # 1 = Last Name
+        # 2 = Email
+        # 3 = Password (may be text type, not password type!)
+        # 4 = Cost Center/Acct Code
+
+        if len(text_inputs) >= 5:
+            # Fill by index position (most reliable)
+            await text_inputs[0].fill(user_data['firstName'])
+            logger.info(f"Filled First Name: {user_data['firstName']}")
+
+            await text_inputs[1].fill(user_data['lastName'])
+            logger.info(f"Filled Last Name: {user_data['lastName']}")
+
+            await text_inputs[2].fill(user_data['email'])
+            logger.info(f"Filled Email: {user_data['email']}")
+
+            # Password field (index 3)
+            if use_auto_password:
+                # Leave as "Auto generated password" - just clear and let it stay
+                # The placeholder text "Auto generated password" suggests we should leave it empty
+                # or the system will auto-generate
+                logger.info("Leaving password field for auto-generation")
+                # Don't fill it - let BankVOD auto-generate
+            else:
+                # For update, fill with HRM default
+                await text_inputs[3].fill(user_data['default_password'])
+                logger.info("Filled password with HRM default")
+
+            # Cost Center (index 4)
+            if user_data.get('cost_center'):
+                await text_inputs[4].fill(user_data['cost_center'])
+                logger.info(f"Filled Cost Center: {user_data['cost_center']}")
+            else:
+                logger.warning("No cost center available")
         else:
-            # For update, use HRM default password
-            password_text = user_data['default_password']
-            logger.info("Using HRM default password for update")
+            logger.error(f"Expected 5 text inputs, found {len(text_inputs)}")
+            raise Exception("Form structure doesn't match expected layout")
 
-        try:
-            await self.page.fill('input[placeholder*="Password"], input[type="password"]', password_text)
-        except:
-            await self.page.fill('input[name*="password"]', password_text)
-
-        # Cost Center/Account Code
-        if user_data.get('cost_center'):
-            try:
-                await self.page.fill('input[placeholder*="Cost Center"], input[placeholder*="Acct Code"]', user_data['cost_center'])
-            except:
-                try:
-                    await self.page.fill('input[name*="cost"], input[name*="acct"]', user_data['cost_center'])
-                except:
-                    logger.warning("Could not fill cost center field")
-
-        # Comments (optional)
+        # Comments (textarea) - also in the iframe
         if user_data.get('comments'):
             try:
-                await self.page.fill('textarea[placeholder*="Comments"], textarea[name*="comments"]', user_data['comments'])
-            except:
-                logger.debug("Comments field not found or not fillable")
+                textarea = await iframe.query_selector('textarea')
+                if textarea:
+                    await textarea.fill(user_data['comments'])
+                    logger.info(f"Filled Comments")
+            except Exception as e:
+                logger.debug(f"Comments field error: {e}")
 
-        logger.info("Form filled successfully")
+        logger.info("Form filled successfully in RadWindow")
 
     async def _submit_form(self):
-        """Submit the user creation/update form"""
-        logger.info("Submitting form...")
+        """Submit the user creation/update form in the RadWindow iframe"""
+        logger.info("Submitting form in RadWindow...")
 
-        # Click Submit button
-        await self.page.click('button:has-text("Submit"), input[type="submit"]')
-        logger.info("Submit button clicked")
+        # Get the RadWindow iframe
+        iframe_element = await self.page.query_selector('iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]')
+        if not iframe_element:
+            logger.error("Could not find RadWindow iframe for submit")
+            raise Exception("RadWindow iframe not found")
 
-        # Wait for response
-        await asyncio.sleep(2)
+        iframe = await iframe_element.content_frame()
+        if not iframe:
+            logger.error("Could not access iframe content for submit")
+            raise Exception("Could not access RadWindow iframe content")
+
+        # Click Submit button in the iframe by ID
+        # The button is: <input type="image" id="b_submit">
+        try:
+            await iframe.click('#b_submit')
+            logger.info("Submit button clicked in RadWindow (ID: b_submit)")
+        except Exception as e:
+            logger.error(f"Submit button error: {e}")
+            raise Exception("Could not click Submit button in RadWindow")
+
+        # Wait for RadWindow to close or form to process
+        await asyncio.sleep(3)
+        logger.info("Form submitted, waiting for RadWindow to close...")
 
     async def _wait_for_success(self) -> Dict[str, Any]:
         """
