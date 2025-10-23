@@ -1,0 +1,23 @@
+{
+  "_comment": "All credentials are stored in Azure Key Vault. See keyvault_secrets.md for secret names.",
+  "vendor": {
+    "name": "ClearCapital",
+    "display_name": "Clear Capital",
+    "keyvault_secrets": {
+      "login_url": "clearcapital-login-url",
+      "admin_username": "clearcapital-admin-username",
+      "admin_password": "clearcapital-admin-password"
+    }
+  },
+  "user_settings": {
+    "username_format": "Firstname.Lastname",
+    "username_format_if_exists": "Firstname.Lastname1",
+    "default_account_active": true,
+    "default_roles": {
+      "create_orders": true,
+      "cancel_orders": false,
+      "accounts_payable": false,
+      "user_management": false
+    }
+  }
+}

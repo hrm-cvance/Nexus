@@ -19,11 +19,21 @@
       "vendor_config": "Vendors/BankVOD/config.json",
       "automation_module": "automation.vendors.bankvod",
       "enabled": true
+    },
+    {
+      "entra_group_name": "ClearCapital_Users",
+      "entra_group_id": "",
+      "vendor_name": "ClearCapital",
+      "vendor_display_name": "Clear Capital",
+      "vendor_logo": "Vendors/ClearCapital/logo.png",
+      "vendor_config": "Vendors/ClearCapital/config.json",
+      "automation_module": "automation.vendors.clearcapital",
+      "enabled": true
     }
   ],
   "metadata": {
-    "version": "1.1",
-    "last_updated": "2025-10-20",
+    "version": "1.2",
+    "last_updated": "2025-10-22",
     "notes": "Group-to-Vendor mappings for automatic vendor detection"
   }
 }
