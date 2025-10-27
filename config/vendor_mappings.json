@@ -29,10 +29,20 @@
       "vendor_config": "Vendors/ClearCapital/config.json",
       "automation_module": "automation.vendors.clearcapital",
       "enabled": true
+    },
+    {
+      "entra_group_name": "DataVerify_Users",
+      "entra_group_id": "",
+      "vendor_name": "DataVerify",
+      "vendor_display_name": "DataVerify Drive",
+      "vendor_logo": "Vendors/DataVerify/logo.png",
+      "vendor_config": "Vendors/DataVerify/config.json",
+      "automation_module": "automation.vendors.dataverify",
+      "enabled": true
     }
   ],
   "metadata": {
-    "version": "1.2",
+    "version": "1.3",
     "last_updated": "2025-10-22",
     "notes": "Group-to-Vendor mappings for automatic vendor detection"
   }

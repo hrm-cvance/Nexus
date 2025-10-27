@@ -209,6 +209,8 @@ class AutomationStatusTab:
                     await self._run_bankvod_automation(vendor)
                 elif vendor.name == "ClearCapital":
                     await self._run_clearcapital_automation(vendor)
+                elif vendor.name == "DataVerify":
+                    await self._run_dataverify_automation(vendor)
                 else:
                     # Unknown vendor
                     self._add_vendor_message(vendor.name, f"✗ Unknown vendor: {vendor.name}")
@@ -394,6 +396,60 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"ClearCapital automation error: {e}")
+            self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
+            self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+    async def _run_dataverify_automation(self, vendor: VendorConfig):
+        """Run DataVerify automation"""
+        try:
+            # Import automation module
+            from automation.vendors.dataverify import provision_user
+
+            # Get config path
+            vendor_mappings = self.config_manager.get_enabled_vendors()
+            dataverify_mapping = next(
+                (m for m in vendor_mappings if m['vendor_name'] == 'DataVerify'),
+                None
+            )
+
+            if not dataverify_mapping:
+                raise Exception("DataVerify mapping not found in config")
+
+            # Build config path
+            config_dir = self.config_manager.project_root
+            config_path = config_dir / dataverify_mapping['vendor_config']
+
+            logger.info(f"Using config: {config_path}")
+
+            # Add status message
+            self._add_vendor_message(vendor.name, "Starting DataVerify automation...")
+
+            # Run automation (no API key needed for DataVerify)
+            result = await provision_user(self.current_user, str(config_path), api_key=None)
+
+            # Display results
+            logger.info(f"DataVerify result: {result}")
+
+            # Add messages
+            for msg in result.get('messages', []):
+                self._add_vendor_message(vendor.name, msg)
+
+            # Add warnings
+            for warning in result.get('warnings', []):
+                self._add_vendor_message(vendor.name, warning, color="orange")
+
+            # Add errors
+            for error in result.get('errors', []):
+                self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
+
+            # Update final status
+            if result['success']:
+                self._update_vendor_status(vendor.name, "success", "✓ Complete")
+            else:
+                self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        except Exception as e:
+            logger.error(f"DataVerify automation error: {e}")
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 

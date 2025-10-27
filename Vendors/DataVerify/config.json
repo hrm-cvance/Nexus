@@ -1,0 +1,42 @@
+{
+  "vendor": {
+    "name": "DataVerify",
+    "display_name": "DataVerify Drive",
+    "keyvault_secrets": {
+      "login_url": "dataverify-login-url",
+      "admin_username": "dataverify-admin-username",
+      "admin_password": "dataverify-admin-password"
+    }
+  },
+  "user_settings": {
+    "username_format": "FirstInitialLastName",
+    "username_format_description": "First initial + Last name (e.g., THurley for Tina Hurley)",
+    "default_account_active": true,
+    "allowed_job_titles": [
+      "Processor",
+      "Underwriter"
+    ],
+    "default_user_profile": "Processor",
+    "available_profiles": {
+      "None": "No access",
+      "Standard Access": "Basic user access",
+      "Processor": "Loan processor role",
+      "Underwriter": "Underwriter role",
+      "National Production Support": "NPS role",
+      "Compliance and QC": "Compliance role",
+      "Administrator": "Admin role (not recommended)"
+    },
+    "auto_generate_password": true,
+    "send_email_notification": true
+  },
+  "form_settings": {
+    "receive_fraud_updates": false,
+    "enable_xml": false,
+    "permissions": {
+      "administrator": false,
+      "company_configuration": false,
+      "reporting_access": false,
+      "scoreview_only": false
+    }
+  }
+}
