@@ -94,13 +94,46 @@ class DataVerifyAutomation:
             await self._click_add_new_user()
             result['messages'].append("✓ Opened Add New User form")
 
-            # Fill user form
-            await self._fill_user_form(user_data)
-            result['messages'].append("✓ Filled user form")
+            # Try to create user with duplicate username handling
+            max_attempts = 10  # Try up to username + numbers 1-9
+            original_username = user_data['username']
 
-            # Submit form
-            await self._submit_form()
-            result['messages'].append("✓ Submitted form")
+            for attempt in range(max_attempts):
+                if attempt > 0:
+                    # Modify username by adding a number
+                    user_data['username'] = f"{original_username}{attempt}"
+                    logger.info(f"Retrying with username: {user_data['username']}")
+                    result['messages'].append(f"ℹ Retrying with username: {user_data['username']}")
+
+                    # Clear the username field and refill
+                    await self.page.fill('input[name="username"]', '')
+                    await asyncio.sleep(0.5)
+
+                # Fill user form
+                await self._fill_user_form(user_data)
+                if attempt == 0:
+                    result['messages'].append("✓ Filled user form")
+
+                # Submit form and check for duplicate error
+                submission_success = await self._submit_form(user_data)
+
+                if submission_success:
+                    # No duplicate error, submission succeeded
+                    result['messages'].append("✓ Submitted form")
+                    if attempt > 0:
+                        result['warnings'].append(f"Username '{original_username}' was taken, used '{user_data['username']}' instead")
+                    break
+                else:
+                    # Duplicate username detected
+                    if attempt == max_attempts - 1:
+                        # Exhausted all attempts
+                        error_msg = f"Could not find available username after {max_attempts} attempts"
+                        logger.error(error_msg)
+                        result['errors'].append(error_msg)
+                        result['success'] = False
+                        return result
+                    # Continue to next attempt
+                    logger.info(f"Username '{user_data['username']}' already exists, trying next number...")
 
             # Wait for success confirmation
             success_result = await self._wait_for_success()
@@ -110,7 +143,7 @@ class DataVerifyAutomation:
             result['errors'].extend(success_result.get('errors', []))
 
             if result['success']:
-                logger.info(f"✓ Successfully created DataVerify account for {user.display_name}")
+                logger.info(f"✓ Successfully created DataVerify account for {user.display_name} with username: {user_data['username']}")
             else:
                 logger.warning(f"DataVerify account creation completed with warnings for {user.display_name}")
 
@@ -482,8 +515,16 @@ class DataVerifyAutomation:
             await self.page.screenshot(path='dataverify_form_error.png')
             raise
 
-    async def _submit_form(self):
-        """Submit the new user form"""
+    async def _submit_form(self, user_data: Dict[str, Any]) -> bool:
+        """
+        Submit the new user form and handle duplicate username errors
+
+        Args:
+            user_data: User data dictionary (for retry with modified username)
+
+        Returns:
+            True if submission succeeded, False if duplicate username error
+        """
         logger.info("Submitting form...")
 
         try:
@@ -521,10 +562,20 @@ class DataVerifyAutomation:
             # Wait for response
             await asyncio.sleep(3)
             await self.page.wait_for_load_state('networkidle', timeout=15000)
+
+            # Check for duplicate username error
+            duplicate_error = await self.page.query_selector('text="ERROR: The chosen username is already in use. Please select another username."')
+            if duplicate_error:
+                logger.warning("Duplicate username detected")
+                await self.page.screenshot(path='dataverify_duplicate_username.png')
+                return False  # Indicate duplicate username
+
             logger.info("✓ Form submitted")
 
             # Extra time for confirmation
             await asyncio.sleep(2)
+
+            return True  # Successful submission
 
         except Exception as e:
             logger.error(f"Form submission failed: {e}")
