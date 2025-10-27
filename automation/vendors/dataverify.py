@@ -327,10 +327,14 @@ class DataVerifyAutomation:
         logger.info("Navigating to User Manager...")
 
         try:
-            # Click "Admin" tab (the image button)
+            # Click "Admin" tab (the image button) to open dropdown
             await self.page.click('img[src="assets/images/button_admin.jpg"]')
             logger.info("Clicked Admin tab")
-            await asyncio.sleep(1)
+
+            # Wait for the dropdown menu to become visible
+            await self.page.wait_for_selector('a[id="User Manager"]', state='visible', timeout=10000)
+            logger.info("Admin dropdown menu visible")
+            await asyncio.sleep(0.5)
 
             # Click "User Manager" link in the dropdown
             await self.page.click('a[id="User Manager"]')
