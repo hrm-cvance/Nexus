@@ -1,0 +1,131 @@
+{
+  "vendor": {
+    "name": "CertifiedCredit",
+    "display_name": "Certified Credit",
+    "keyvault_secrets": {
+      "login_url": "certifiedcredit-login-url",
+      "admin_username": "certifiedcredit-admin-username",
+      "admin_password": "certifiedcredit-admin-password",
+      "default_password": "certifiedcredit-default-password"
+    }
+  },
+  "user_settings": {
+    "username_format": "FirstInitialLastName",
+    "username_format_description": "First initial + Last name (e.g., JSmith for John Smith)",
+    "password_mode": "manual",
+    "force_password_change": true,
+    "default_department": "",
+    "leave_job_title_blank": true
+  },
+  "form_settings": {
+    "fields": {
+      "department": {
+        "description": "Branch Cost Center for the user",
+        "required": true,
+        "source": "department"
+      },
+      "job_title": {
+        "description": "Leave blank per instructions",
+        "required": false,
+        "value": ""
+      },
+      "full_name": {
+        "description": "First Last name",
+        "required": true,
+        "source": "display_name"
+      },
+      "login": {
+        "description": "FirstInitialLastName",
+        "required": true,
+        "format": "FirstInitialLastName"
+      },
+      "phone": {
+        "description": "Office number",
+        "required": false,
+        "source": "business_phones"
+      },
+      "fax": {
+        "description": "Fax Number",
+        "required": false,
+        "source": "fax"
+      },
+      "email": {
+        "description": "Email address",
+        "required": true,
+        "source": "mail"
+      },
+      "cell_phone": {
+        "description": "User's cell number (used for 2 party authentication)",
+        "required": false,
+        "source": "mobile_phone"
+      },
+      "full_address": {
+        "description": "Leave blank per instructions",
+        "required": false,
+        "value": ""
+      }
+    },
+    "password": {
+      "set_manually": true,
+      "force_change_on_first_login": true
+    }
+  },
+  "access_permissions": {
+    "default_setup": {
+      "description": "Check 'Is this user an administrator' to check all boxes, then uncheck it",
+      "steps": [
+        "Check 'Is this user an administrator' (checks all yellow boxes)",
+        "Uncheck 'Is this user an administrator'",
+        "Change 'Rescore Ordering' to 'No access'"
+      ]
+    },
+    "restrictions": {
+      "WORDER": {
+        "description": "Disable new Credit Report ordering through website",
+        "enabled": true
+      },
+      "TAX": {
+        "description": "Disable Tax Transcript Verification ordering and viewing",
+        "enabled": true,
+        "default": true
+      }
+    }
+  },
+  "mfa": {
+    "enabled": true,
+    "description": "Two-factor authentication required after login",
+    "detection": {
+      "mfa_page_indicators": [
+        "text=\"Enter your verification code\"",
+        "text=\"Authentication\"",
+        "text=\"Verification Code\"",
+        "input[name*=\"code\"]",
+        "input[placeholder*=\"code\"]"
+      ],
+      "success_indicators": [
+        "text=\"User Setup\"",
+        "text=\"Tools\"",
+        "a:has-text(\"User Setup\")"
+      ]
+    },
+    "wait_timeout": 300000,
+    "check_interval": 2000
+  },
+  "workflow": {
+    "steps": [
+      "Login to Certified Credit",
+      "Wait for MFA completion (manual user input)",
+      "Navigate to Tools > User Setup",
+      "Click 'Add' button",
+      "Fill user form in 'New User' popup",
+      "Set password manually",
+      "Configure Access Permissions (check/uncheck admin trick)",
+      "Set Rescore Ordering to 'No access'",
+      "Save user",
+      "Find user in User Edit list and click name",
+      "Go to Restrictions tab",
+      "Check WORDER box",
+      "Save"
+    ]
+  }
+}
