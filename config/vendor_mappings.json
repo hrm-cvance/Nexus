@@ -39,6 +39,16 @@
       "vendor_config": "Vendors/DataVerify/config.json",
       "automation_module": "automation.vendors.dataverify",
       "enabled": true
+    },
+    {
+      "entra_group_name": "CertifiedCredit_Users",
+      "entra_group_id": "",
+      "vendor_name": "CertifiedCredit",
+      "vendor_display_name": "Certified Credit",
+      "vendor_logo": "Vendors/CertifiedCredit/logo.png",
+      "vendor_config": "Vendors/CertifiedCredit/config.json",
+      "automation_module": "automation.vendors.certifiedcredit",
+      "enabled": true
     }
   ],
   "metadata": {
