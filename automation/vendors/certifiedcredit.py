@@ -138,26 +138,6 @@ class CertifiedCreditAutomation:
                         return result
                     logger.info(f"Username '{user_data['username']}' already exists, trying next number...")
 
-                    # Clear the error message from the page so the next save attempt will work
-                    try:
-                        logger.info("Clearing error messages from page...")
-                        await self.popup.evaluate('''
-                            // Hide error messages
-                            const errorMsgs = document.querySelectorAll('.ErrorMsg');
-                            errorMsgs.forEach(el => el.style.display = 'none');
-
-                            // Clear validation summary
-                            const validSum = document.getElementById('ValidSum');
-                            if (validSum) validSum.style.display = 'none';
-
-                            // Remove error icons next to fields
-                            const errorIcons = document.querySelectorAll('img[src*="error_icon"]');
-                            errorIcons.forEach(img => img.style.display = 'none');
-                        ''')
-                        logger.info("Error messages cleared")
-                    except Exception as e:
-                        logger.warning(f"Could not clear error messages: {e}")
-
             # Configure Restrictions
             await self._configure_restrictions(user_data)
             result['messages'].append("✓ Configured restrictions")
