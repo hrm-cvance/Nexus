@@ -473,13 +473,9 @@ class CertifiedCreditAutomation:
             await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword2_Input', user_data['password'])
             logger.info("Filled re-type password")
 
-            # Check "Force user to change password on the first system login"
-            # Need to find the checkbox ID for this
-            try:
-                await self.popup.check('input[type="checkbox"][id*="force"], input[type="checkbox"][id*="FirstLogin"]')
-                logger.info("Checked force password change")
-            except:
-                logger.warning("Could not find force password change checkbox - skipping")
+            # Check "Force user to change password on the first system login" - REQUIRED
+            await self.popup.check('#ctrlBasicInfo_ctrlAddUserOptions_chkForceChangePwd')
+            logger.info("Checked force password change (REQUIRED)")
 
             logger.info("Form filled successfully")
 
@@ -557,15 +553,21 @@ class CertifiedCreditAutomation:
             # Wait for save to complete
             await asyncio.sleep(2)
 
-            # Check for duplicate login error
+            # Check for duplicate login error (case-insensitive partial match)
             try:
-                duplicate_error = await self.popup.query_selector('text="Duplicate Login found"')
-                if duplicate_error:
-                    logger.warning("Duplicate login detected")
+                # Check page content for duplicate login message
+                page_content = await self.popup.content()
+                if 'duplicate' in page_content.lower() and 'login' in page_content.lower():
+                    logger.warning("Duplicate login detected in page content")
                     await self.popup.screenshot(path='certifiedcredit_duplicate_login.png')
+
+                    # Save HTML for debugging
+                    with open('certifiedcredit_duplicate_error.html', 'w', encoding='utf-8') as f:
+                        f.write(page_content)
+
                     return False  # Indicate duplicate
-            except:
-                pass
+            except Exception as e:
+                logger.warning(f"Error checking for duplicate: {e}")
 
             await asyncio.sleep(1)
             logger.info("Saved successfully")
