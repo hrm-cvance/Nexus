@@ -31,8 +31,8 @@ async def test_certifiedcredit():
         job_title="Loan Processor",
         department="Operations",
         office_location="Main Office",
-        business_phones=["(123) 456-7890"],
-        mobile_phone="(123) 456-7891"
+        business_phones=["336-848-1234"],
+        mobile_phone="336-848-5678"
     )
 
     print("Testing Certified Credit automation...")

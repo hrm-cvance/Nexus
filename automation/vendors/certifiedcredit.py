@@ -93,17 +93,50 @@ class CertifiedCreditAutomation:
             await self._click_add_button()
             result['messages'].append("✓ Opened New User form")
 
-            # Fill user form
-            await self._fill_user_form(user_data)
-            result['messages'].append("✓ Filled user form")
+            # Try to create user with duplicate username handling
+            max_attempts = 10
+            original_username = user_data['username']
 
-            # Configure Access Permissions
-            await self._configure_access_permissions()
-            result['messages'].append("✓ Configured access permissions")
+            for attempt in range(max_attempts):
+                if attempt > 0:
+                    # Modify username by adding a number
+                    user_data['username'] = f"{original_username}{attempt}"
+                    logger.info(f"Retrying with username: {user_data['username']}")
+                    result['messages'].append(f"ℹ Retrying with username: {user_data['username']}")
 
-            # Save user
-            await self._save_user()
-            result['messages'].append("✓ Saved user")
+                    # Clear and refill username field
+                    await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', '')
+                    await asyncio.sleep(0.5)
+                    await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', user_data['username'])
+                    logger.info(f"Updated username to: {user_data['username']}")
+
+                # Fill user form (first time) or just update username (retry)
+                if attempt == 0:
+                    await self._fill_user_form(user_data)
+                    result['messages'].append("✓ Filled user form")
+
+                    # Configure Access Permissions
+                    await self._configure_access_permissions()
+                    result['messages'].append("✓ Configured access permissions")
+
+                # Save user and check for duplicate
+                save_result = await self._save_user()
+
+                if save_result:
+                    # Save succeeded, no duplicate
+                    result['messages'].append("✓ Saved user")
+                    if attempt > 0:
+                        result['warnings'].append(f"Username '{original_username}' was taken, used '{user_data['username']}' instead")
+                    break
+                else:
+                    # Duplicate detected
+                    if attempt == max_attempts - 1:
+                        error_msg = f"Could not find available username after {max_attempts} attempts"
+                        logger.error(error_msg)
+                        result['errors'].append(error_msg)
+                        result['success'] = False
+                        return result
+                    logger.info(f"Username '{user_data['username']}' already exists, trying next number...")
 
             # Configure Restrictions
             await self._configure_restrictions(user_data)
@@ -521,10 +554,22 @@ class CertifiedCreditAutomation:
             await self.popup.click('#btnSave')
             logger.info("Clicked Save button")
 
-            # Wait for save to complete and popup to close
-            await asyncio.sleep(3)
+            # Wait for save to complete
+            await asyncio.sleep(2)
 
-            logger.info("✓ Saved")
+            # Check for duplicate login error
+            try:
+                duplicate_error = await self.popup.query_selector('text="Duplicate Login found"')
+                if duplicate_error:
+                    logger.warning("Duplicate login detected")
+                    await self.popup.screenshot(path='certifiedcredit_duplicate_login.png')
+                    return False  # Indicate duplicate
+            except:
+                pass
+
+            await asyncio.sleep(1)
+            logger.info("Saved successfully")
+            return True  # Successful save
 
         except Exception as e:
             logger.error(f"Save failed: {e}")
@@ -548,24 +593,67 @@ class CertifiedCreditAutomation:
             logger.info("Waiting for popup to close after save...")
             await asyncio.sleep(3)
 
-            # Find the newly created user in the list and click to reopen
-            logger.info("Finding user in User Setup list...")
-            username = user_data['username']
+            # Find the newly created user in the list by DISPLAY NAME (not username)
+            logger.info("Finding user in User Setup list by display name...")
+            display_name = user_data['fullName']  # Use the full display name
 
             # Wait for main page to be ready
             await self.page.wait_for_selector('input[value="Add"]', timeout=10000)
 
-            # Set up listener for the popup that will open when we click the user
-            async with self.page.expect_popup(timeout=10000) as popup_info:
-                # Click on the username link to reopen popup
-                await self.page.click(f'a:has-text("{username}")')
-                logger.info(f"Clicked on user: {username}")
+            # Take screenshot to see the user list
+            await self.page.screenshot(path='certifiedcredit_user_list.png')
+            logger.info("Screenshot of user list saved")
 
-            # Get the reopened popup
-            self.popup = await popup_info.value
-            await self.popup.wait_for_load_state('domcontentloaded')
-            await asyncio.sleep(1)
-            logger.info("User popup reopened")
+            # Find the table row with matching display name and click the Name link
+            # We need to find the most recently created user (last in the list with this name)
+            username = user_data['username']
+
+            # Use JavaScript to find and click the correct row
+            clicked = await self.page.evaluate(f'''() => {{
+                const displayName = "{display_name}";
+
+                // Find all rows in the table
+                const rows = Array.from(document.querySelectorAll('tr'));
+
+                // Find rows where Name matches displayName
+                const matchingRows = rows.filter(row => {{
+                    const cells = row.querySelectorAll('td');
+                    if (cells.length === 0) return false;
+                    const nameCell = cells[0]; // First column is Name
+                    return nameCell.textContent.trim().toUpperCase() === displayName.toUpperCase();
+                }});
+
+                // Get the last matching row (most recently added)
+                if (matchingRows.length > 0) {{
+                    const targetRow = matchingRows[matchingRows.length - 1];
+                    const nameLink = targetRow.querySelector('td:first-child a');
+                    if (nameLink) {{
+                        nameLink.click();
+                        return true;
+                    }}
+                }}
+                return false;
+            }}''')
+
+            if not clicked:
+                raise Exception(f"Could not find and click user with display name: {display_name}")
+
+            logger.info(f"Clicked on user by display name: {display_name}")
+            await asyncio.sleep(2)
+
+            # Check if a popup opened
+            try:
+                # Wait briefly for popup
+                async with self.page.expect_popup(timeout=3000) as popup_info:
+                    pass
+                self.popup = await popup_info.value
+                await self.popup.wait_for_load_state('domcontentloaded')
+                logger.info("User popup opened")
+            except:
+                # No popup, use main page
+                await self.page.wait_for_load_state('networkidle')
+                self.popup = self.page
+                logger.info("Using main page for user edit")
 
             # Click Restrictions tab (it's a link at the top)
             await self.popup.click('a:has-text("RESTRICTIONS")')
@@ -581,16 +669,9 @@ class CertifiedCreditAutomation:
             # Take screenshot of Restrictions tab
             await self.popup.screenshot(path='certifiedcredit_restrictions_tab.png')
 
-            # Check WORDER checkbox - try different selectors
-            try:
-                await self.popup.check('input[type="checkbox"][id*="WORDER"]')
-                logger.info("Checked WORDER restriction (by id)")
-            except:
-                try:
-                    await self.popup.check('input[type="checkbox"][name="chkR_-WORDER"]')
-                    logger.info("Checked WORDER restriction (by name)")
-                except:
-                    logger.warning("Could not find WORDER checkbox - check HTML file")
+            # Check WORDER checkbox using the correct ID
+            await self.popup.check('#chkDisableWebOrder')
+            logger.info("Checked WORDER restriction (chkDisableWebOrder)")
 
             # Take screenshot after checking
             await self.popup.screenshot(path='certifiedcredit_restrictions_configured.png')
