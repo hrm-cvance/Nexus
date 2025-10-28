@@ -110,6 +110,12 @@ class CertifiedCreditAutomation:
                     await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', user_data['username'])
                     logger.info(f"Updated username to: {user_data['username']}")
 
+                    # Trigger blur/change events to run validation (simulates tabbing out)
+                    logger.info("Triggering username validation by pressing Tab...")
+                    await self.popup.press('#ctrlBasicInfo_txtLogin_Input', 'Tab')
+                    await asyncio.sleep(1)  # Wait for validation to complete
+                    logger.info("Username validation triggered")
+
                     # Re-enter passwords (they may have been cleared by error)
                     logger.info("Re-entering passwords...")
                     await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword_Input', user_data['password'])
