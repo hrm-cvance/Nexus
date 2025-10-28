@@ -110,6 +110,12 @@ class CertifiedCreditAutomation:
                     await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', user_data['username'])
                     logger.info(f"Updated username to: {user_data['username']}")
 
+                    # Re-enter passwords (they may have been cleared by error)
+                    logger.info("Re-entering passwords...")
+                    await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword_Input', user_data['password'])
+                    await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword2_Input', user_data['password'])
+                    logger.info("Passwords re-entered")
+
                 # Fill user form (first time) or just update username (retry)
                 if attempt == 0:
                     await self._fill_user_form(user_data)
