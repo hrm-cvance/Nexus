@@ -546,9 +546,9 @@ class CertifiedCreditAutomation:
             # Take screenshot before save
             await self.popup.screenshot(path='certifiedcredit_before_save.png')
 
-            # Click Save button in popup
+            # Click Save button in popup (input type="submit")
             logger.info("⚠️ CLICKING SAVE BUTTON NOW")
-            await self.popup.click('#btnSave')
+            await self.popup.click('input[type="submit"]#btnSave')
             logger.info("✓ Save button clicked successfully")
 
             # Wait for save to complete
