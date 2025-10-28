@@ -566,6 +566,10 @@ class CertifiedCreditAutomation:
             # Take screenshot before save
             await self.popup.screenshot(path='certifiedcredit_before_save.png')
 
+            # Wait 5 seconds before clicking save to ensure form is ready
+            logger.info("Waiting 5 seconds before clicking Save...")
+            await asyncio.sleep(5)
+
             # Click Save button in popup (input type="submit")
             logger.info("⚠️ CLICKING SAVE BUTTON NOW")
             await self.popup.click('input[type="submit"]#btnSave')
