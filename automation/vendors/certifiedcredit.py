@@ -547,18 +547,20 @@ class CertifiedCreditAutomation:
             await self.popup.screenshot(path='certifiedcredit_before_save.png')
 
             # Click Save button in popup
+            logger.info("⚠️ CLICKING SAVE BUTTON NOW")
             await self.popup.click('#btnSave')
-            logger.info("Clicked Save button")
+            logger.info("✓ Save button clicked successfully")
 
             # Wait for save to complete
             await asyncio.sleep(2)
 
             # Check for duplicate login error (case-insensitive partial match)
             try:
+                logger.info("Checking page content for duplicate login error...")
                 # Check page content for duplicate login message
                 page_content = await self.popup.content()
                 if 'duplicate' in page_content.lower() and 'login' in page_content.lower():
-                    logger.warning("Duplicate login detected in page content")
+                    logger.warning("❌ DUPLICATE LOGIN DETECTED in page content")
                     await self.popup.screenshot(path='certifiedcredit_duplicate_login.png')
 
                     # Save HTML for debugging
@@ -566,11 +568,13 @@ class CertifiedCreditAutomation:
                         f.write(page_content)
 
                     return False  # Indicate duplicate
+                else:
+                    logger.info("✓ No duplicate login error found")
             except Exception as e:
                 logger.warning(f"Error checking for duplicate: {e}")
 
             await asyncio.sleep(1)
-            logger.info("Saved successfully")
+            logger.info("✓ User saved successfully")
             return True  # Successful save
 
         except Exception as e:
