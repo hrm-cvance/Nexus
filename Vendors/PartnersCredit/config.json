@@ -1,0 +1,46 @@
+{
+  "vendor": {
+    "name": "PartnersCredit",
+    "display_name": "Partners Credit",
+    "description": "Partners Credit & Verification Services",
+    "keyvault_secrets": {
+      "login_url": "partnerscredit-login-url",
+      "admin_username": "partnerscredit-admin-username",
+      "admin_password": "partnerscredit-admin-password"
+    }
+  },
+  "user_settings": {
+    "password_mode": "generated_by_vendor",
+    "phone_format": "no_dashes",
+    "default_report_access_level": "Department",
+    "default_department": "Plano Division",
+    "default_comments": "Eliminate the ability to pull credit on the website and order score updates."
+  },
+  "department_mapping": {
+    "cost_center_rules": {
+      "8000_range": {
+        "department": "East Region",
+        "description": "Cost Centers 8000-8999"
+      },
+      "special_cost_centers": {
+        "cost_centers": ["7003", "7074", "7075"],
+        "department": "Plano Division",
+        "comments": "Place derogatory and tradelines at the bottom of the report. Eliminate the ability to pull credit on the website and order score updates."
+      }
+    }
+  },
+  "workflow": {
+    "steps": [
+      "login",
+      "navigate_to_admin",
+      "click_user_admin",
+      "click_new_user_requests",
+      "input_number_of_users",
+      "fill_user_form",
+      "submit_request"
+    ]
+  },
+  "mfa": {
+    "enabled": false
+  }
+}

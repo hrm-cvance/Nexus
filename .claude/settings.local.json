@@ -32,7 +32,12 @@
       "Bash(git config:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(rm:*)",
+      "Bash(git restore:*)",
+      "Read(//c/Users/CVance.HRM/Desktop/**)",
+      "Bash(git log:*)",
+      "Bash(1)"
     ],
     "deny": [],
     "ask": []

@@ -213,6 +213,8 @@ class AutomationStatusTab:
                     await self._run_dataverify_automation(vendor)
                 elif vendor.name == "CertifiedCredit":
                     await self._run_certifiedcredit_automation(vendor)
+                elif vendor.name == "PartnersCredit":
+                    await self._run_partnerscredit_automation(vendor)
                 else:
                     # Unknown vendor
                     self._add_vendor_message(vendor.name, f"✗ Unknown vendor: {vendor.name}")
@@ -499,6 +501,50 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"Certified Credit automation error: {e}")
+            self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
+            self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+    async def _run_partnerscredit_automation(self, vendor: VendorConfig):
+        """Run Partners Credit automation"""
+        try:
+            from automation.vendors.partnerscredit import provision_user
+
+            # Get config path
+            vendor_mappings = self.config_manager.get_enabled_vendors()
+            partnerscredit_mapping = next(
+                (m for m in vendor_mappings if m['vendor_name'] == 'PartnersCredit'),
+                None
+            )
+
+            if not partnerscredit_mapping:
+                raise Exception("Partners Credit vendor mapping not found")
+
+            config_path = config_dir / partnerscredit_mapping['vendor_config']
+
+            # Add status message
+            self._add_vendor_message(vendor.name, "Starting Partners Credit automation...")
+
+            # Run automation (no API key needed for Partners Credit)
+            result = await provision_user(self.current_user, str(config_path), api_key=None)
+
+            # Display results
+            for msg in result.get('messages', []):
+                self._add_vendor_message(vendor.name, msg)
+
+            for warning in result.get('warnings', []):
+                self._add_vendor_message(vendor.name, warning, color="orange")
+
+            for error in result.get('errors', []):
+                self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
+
+            # Update final status
+            if result['success']:
+                self._update_vendor_status(vendor.name, "success", "✓ Complete")
+            else:
+                self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        except Exception as e:
+            logger.error(f"Partners Credit automation error: {e}")
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 

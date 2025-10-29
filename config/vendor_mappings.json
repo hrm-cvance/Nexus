@@ -49,6 +49,16 @@
       "vendor_config": "Vendors/CertifiedCredit/config.json",
       "automation_module": "automation.vendors.certifiedcredit",
       "enabled": true
+    },
+    {
+      "entra_group_name": "PartnersCredit_Users",
+      "entra_group_id": "",
+      "vendor_name": "PartnersCredit",
+      "vendor_display_name": "Partners Credit",
+      "vendor_logo": "Vendors/PartnersCredit/logo.png",
+      "vendor_config": "Vendors/PartnersCredit/config.json",
+      "automation_module": "automation.vendors.partnerscredit",
+      "enabled": true
     }
   ],
   "metadata": {
