@@ -630,8 +630,8 @@ class CertifiedCreditAutomation:
             # We need to find the most recently created user (last in the list with this name)
             username = user_data['username']
 
-            # Use JavaScript to find and click the correct row
-            clicked = await self.page.evaluate(f'''() => {{
+            # Use JavaScript to find the user link (don't click yet)
+            user_found = await self.page.evaluate(f'''() => {{
                 const displayName = "{display_name}";
 
                 // Find all rows in the table
@@ -645,37 +645,41 @@ class CertifiedCreditAutomation:
                     return nameCell.textContent.trim().toUpperCase() === displayName.toUpperCase();
                 }});
 
-                // Get the last matching row (most recently added)
-                if (matchingRows.length > 0) {{
-                    const targetRow = matchingRows[matchingRows.length - 1];
-                    const nameLink = targetRow.querySelector('td:first-child a');
-                    if (nameLink) {{
-                        nameLink.click();
-                        return true;
-                    }}
-                }}
-                return false;
+                // Return true if we found matching rows
+                return matchingRows.length > 0;
             }}''')
 
-            if not clicked:
-                raise Exception(f"Could not find and click user with display name: {display_name}")
+            if not user_found:
+                raise Exception(f"Could not find user with display name: {display_name}")
 
-            logger.info(f"Clicked on user by display name: {display_name}")
-            await asyncio.sleep(2)
+            logger.info(f"Found user with display name: {display_name}")
 
-            # Check if a popup opened
+            # Now click the user link and wait for popup
             try:
-                # Wait briefly for popup
-                async with self.page.expect_popup(timeout=3000) as popup_info:
-                    pass
+                async with self.page.expect_popup(timeout=5000) as popup_info:
+                    # Click the user link inside the expect_popup context
+                    await self.page.evaluate(f'''() => {{
+                        const displayName = "{display_name}";
+                        const rows = Array.from(document.querySelectorAll('tr'));
+                        const matchingRows = rows.filter(row => {{
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length === 0) return false;
+                            const nameCell = cells[0];
+                            return nameCell.textContent.trim().toUpperCase() === displayName.toUpperCase();
+                        }});
+                        if (matchingRows.length > 0) {{
+                            const targetRow = matchingRows[matchingRows.length - 1];
+                            const nameLink = targetRow.querySelector('td:first-child a');
+                            if (nameLink) nameLink.click();
+                        }}
+                    }}''')
+
                 self.popup = await popup_info.value
                 await self.popup.wait_for_load_state('domcontentloaded')
-                logger.info("User popup opened")
-            except:
-                # No popup, use main page
-                await self.page.wait_for_load_state('networkidle')
-                self.popup = self.page
-                logger.info("Using main page for user edit")
+                logger.info("User popup opened successfully")
+            except Exception as e:
+                logger.error(f"Failed to open user popup: {e}")
+                raise
 
             # Click Restrictions tab (it's a link at the top)
             await self.popup.click('a:has-text("RESTRICTIONS")')
