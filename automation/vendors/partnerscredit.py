@@ -101,7 +101,9 @@ class PartnersCreditAutomation:
             result['messages'].append("✓ User request submitted")
 
             result['success'] = True
-            result['messages'].append("User credentials will be sent via encrypted PDF email from Partners Credit")
+            result['warnings'].append("⚠ Manual step required: Check email for encrypted PDF with user credentials from Partners Credit")
+            result['messages'].append("ℹ Partners Credit will send credentials via encrypted PDF email")
+            result['messages'].append("ℹ Use your Partners Credit admin password to decrypt the PDF")
             logger.info(f"✓ Successfully submitted Partners Credit request for {user.display_name}")
 
         except Exception as e:
