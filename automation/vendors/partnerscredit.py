@@ -227,19 +227,9 @@ class PartnersCreditAutomation:
         if not password_filled:
             raise Exception("Could not find password field")
 
-        # Click login button
-        login_clicked = False
-        for selector in ['button[type="submit"]', 'input[type="submit"]', 'button:has-text("Log")', 'input[value*="Log"]']:
-            try:
-                await self.page.click(selector)
-                login_clicked = True
-                logger.info(f"Clicked login with selector: {selector}")
-                break
-            except:
-                continue
-
-        if not login_clicked:
-            raise Exception("Could not find login button")
+        # Click "Client Login" button
+        await self.page.click('input[value="Client Login"]')
+        logger.info("Clicked Client Login button")
 
         # Wait for login to complete
         await self.page.wait_for_load_state('networkidle')
