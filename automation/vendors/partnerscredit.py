@@ -244,8 +244,8 @@ class PartnersCreditAutomation:
         logger.info("Login completed")
 
     async def _handle_mfa(self):
-        """Handle MFA public/private computer selection and wait for text code entry"""
-        logger.info("Checking for MFA prompt...")
+        """Wait for user to manually handle MFA (public/private selection and text code entry)"""
+        logger.info("Waiting for manual MFA completion...")
 
         # Wait a moment for MFA page to load
         await asyncio.sleep(2)
@@ -253,41 +253,8 @@ class PartnersCreditAutomation:
         # Take screenshot to see MFA page
         await self.page.screenshot(path='partnerscredit_mfa_page.png')
 
-        # Check if we're on MFA page (look for public/private computer options)
         try:
-            # Look for radio buttons or options related to public/private computer
-            # Try to find and click "Private Computer" option
-            private_computer_clicked = False
-
-            for selector in [
-                'input[type="radio"][value*="private"]',
-                'input[type="radio"][value*="Private"]',
-                'input[id*="private"]',
-                'input[id*="Private"]',
-                'label:has-text("Private")',
-                'label:has-text("private")'
-            ]:
-                try:
-                    element = await self.page.query_selector(selector)
-                    if element:
-                        await self.page.click(selector)
-                        logger.info(f"Selected private computer option with selector: {selector}")
-                        private_computer_clicked = True
-                        break
-                except:
-                    continue
-
-            if not private_computer_clicked:
-                logger.warning("Could not find private computer option, may not be on MFA page")
-
-            await asyncio.sleep(1)
-
-            # Take screenshot after selecting private
-            await self.page.screenshot(path='partnerscredit_mfa_private_selected.png')
-
-            # Now wait for user to manually enter the text code
-            logger.info("Waiting for manual MFA code entry...")
-            logger.info("Please check your phone for the text message code and enter it")
+            logger.info("Please select public/private computer and enter the text message code")
 
             # Poll for MFA completion by looking for dashboard or admin elements
             max_wait_time = 300  # 5 minutes
