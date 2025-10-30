@@ -9,12 +9,13 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
+from services.ai_matcher import AIMatcherService
 
 # Configure logging
 logger = logging.getLogger('automation.vendors.partnerscredit')
@@ -23,17 +24,20 @@ logger = logging.getLogger('automation.vendors.partnerscredit')
 class PartnersCreditAutomation:
     """Handles Partners Credit user provisioning automation"""
 
-    def __init__(self, config_path: str, keyvault: KeyVaultService):
+    def __init__(self, config_path: str, keyvault: KeyVaultService, api_key: Optional[str] = None):
         """
         Initialize Partners Credit automation
 
         Args:
             config_path: Path to vendor config.json
             keyvault: KeyVaultService instance for credential retrieval
+            api_key: Anthropic API key for AI matching (optional)
         """
         self.config_path = Path(config_path)
         self.keyvault = keyvault
         self.config = self._load_config()
+        self.title_mappings = self._load_title_mappings()
+        self.ai_matcher = AIMatcherService(api_key=api_key)
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
@@ -45,6 +49,21 @@ class PartnersCreditAutomation:
             config = json.load(f)
         logger.info(f"Loaded config from {self.config_path}")
         return config
+
+    def _load_title_mappings(self) -> List[Dict[str, Any]]:
+        """Load title to Report Access Level mappings"""
+        try:
+            mapping_path = self.config_path.parent / 'title_mapping.json'
+            with open(mapping_path, 'r') as f:
+                mapping_data = json.load(f)
+            logger.info(f"Loaded {len(mapping_data['title_mappings'])} title mappings from {mapping_path}")
+            return mapping_data['title_mappings']
+        except Exception as e:
+            logger.error(f"Failed to load title mappings: {e}")
+            # Return default if file doesn't exist
+            return [
+                {'title': 'Default', 'report_access_level': 'User', 'keywords': []}
+            ]
 
     async def create_account(self, user: EntraUser, headless: bool = False) -> Dict[str, Any]:
         """
@@ -153,6 +172,20 @@ class PartnersCreditAutomation:
         # Title/Job Title
         title = user.job_title or ""
 
+        # AI-based Report Access Level matching
+        report_access_level = "Department"  # Default (radio button selection)
+        if user.job_title:
+            role_suggestion = self.ai_matcher.suggest_role(
+                job_title=user.job_title,
+                available_roles=self.title_mappings,
+                department=user.department
+            )
+            if role_suggestion and 'match' in role_suggestion:
+                report_access_level = role_suggestion['match'].get('report_access_level', 'Department')
+                logger.info(f"AI matched job title '{user.job_title}' to Report Access Level: {report_access_level}")
+            else:
+                logger.warning(f"No AI match for job title '{user.job_title}', using default: Department")
+
         # Department logic based on cost center (if available in department field)
         department = "Plano Division"  # Default
         comments = self.config['user_settings']['default_comments']
@@ -174,7 +207,7 @@ class PartnersCreditAutomation:
             'phoneNumber': phone_clean,
             'email': email,
             'title': title,
-            'reportAccessLevel': 'Department',
+            'reportAccessLevel': report_access_level,
             'department': department,
             'comments': comments
         }
@@ -383,9 +416,33 @@ class PartnersCreditAutomation:
         except:
             logger.warning("Could not fill Title field")
 
-        # Select Report Access Level - Department (radio button)
-        await self.page.click('input[type="radio"][value="Department"], input[type="radio"]:near(:text("Department"))')
-        logger.info("Selected Report Access Level: Department")
+        # Select Report Access Level (radio button) - Company, Department, or User
+        report_access_level = user_data['reportAccessLevel']
+
+        # Try to click the radio button for the selected Report Access Level
+        radio_selectors = [
+            f'input[type="radio"][value="{report_access_level}"]',
+            f'#rdoReportAccessLevel{report_access_level}',
+            f'input[type="radio"][id*="{report_access_level}"]'
+        ]
+
+        radio_clicked = False
+        for selector in radio_selectors:
+            try:
+                await self.page.click(selector)
+                radio_clicked = True
+                logger.info(f"Selected Report Access Level: {report_access_level}")
+                break
+            except:
+                continue
+
+        if not radio_clicked:
+            # Fallback: try clicking near text
+            try:
+                await self.page.click(f'label:has-text("{report_access_level}")')
+                logger.info(f"Selected Report Access Level: {report_access_level} (via label)")
+            except:
+                logger.warning(f"Could not select Report Access Level: {report_access_level}, may need manual selection")
 
         # Select Department from dropdown
         await self.page.select_option('select', label=user_data['department'])
@@ -429,7 +486,7 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
     Args:
         user: EntraUser object
         config_path: Path to vendor config JSON
-        api_key: Optional API key (not used for Partners Credit)
+        api_key: Anthropic API key for AI matching (optional)
 
     Returns:
         Dict with provisioning result
@@ -439,8 +496,8 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
     # Initialize KeyVault service
     keyvault = KeyVaultService()
 
-    # Create automation instance
-    automation = PartnersCreditAutomation(config_path, keyvault)
+    # Create automation instance with AI matcher support
+    automation = PartnersCreditAutomation(config_path, keyvault, api_key=api_key)
 
     # Run automation
     result = await automation.create_account(user, headless=False)

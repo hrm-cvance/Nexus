@@ -1,0 +1,88 @@
+{
+  "title_mappings": [
+    {
+      "title": "Loan Officer",
+      "report_access_level": "User",
+      "keywords": ["loan officer", "lo", "originator", "mlO"]
+    },
+    {
+      "title": "Loan Officer Assistant",
+      "report_access_level": "Company",
+      "keywords": ["loan officer assistant", "loa", "assistant"]
+    },
+    {
+      "title": "Loan Setup",
+      "report_access_level": "Company",
+      "keywords": ["loan setup", "setup"]
+    },
+    {
+      "title": "Loan Processor",
+      "report_access_level": "Company",
+      "keywords": ["loan processor", "processor", "lp"]
+    },
+    {
+      "title": "Loan Coordinator",
+      "report_access_level": "Company",
+      "keywords": ["loan coordinator", "coordinator"]
+    },
+    {
+      "title": "Operations Manager",
+      "report_access_level": "Company",
+      "keywords": ["operations manager", "ops manager"]
+    },
+    {
+      "title": "Office Manager",
+      "report_access_level": "Company",
+      "keywords": ["office manager"]
+    },
+    {
+      "title": "Branch Manager",
+      "report_access_level": "Company",
+      "keywords": ["branch manager"]
+    },
+    {
+      "title": "Sales Manager",
+      "report_access_level": "Company",
+      "keywords": ["sales manager"]
+    },
+    {
+      "title": "Area Manager",
+      "report_access_level": "Company",
+      "keywords": ["area manager"]
+    },
+    {
+      "title": "Underwriter",
+      "report_access_level": "Company",
+      "keywords": ["underwriter", "uw"]
+    },
+    {
+      "title": "Appraisal Desk",
+      "report_access_level": "No",
+      "keywords": ["appraisal desk", "appraisal"]
+    },
+    {
+      "title": "Closer",
+      "report_access_level": "No",
+      "keywords": ["closer", "closing"]
+    },
+    {
+      "title": "LockDesk",
+      "report_access_level": "No",
+      "keywords": ["lock desk", "lockdesk", "lock"]
+    },
+    {
+      "title": "Insuring",
+      "report_access_level": "No",
+      "keywords": ["insuring", "insurance"]
+    },
+    {
+      "title": "Post Closer",
+      "report_access_level": "No",
+      "keywords": ["post closer", "post closing", "post-closer"]
+    }
+  ],
+  "default": {
+    "report_access_level": "User",
+    "note": "Default for unmatched titles"
+  }
+}
