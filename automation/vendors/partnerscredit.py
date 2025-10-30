@@ -182,7 +182,7 @@ class PartnersCreditAutomation:
                 department=user.department
             )
             if role_suggestion and 'match' in role_suggestion:
-                report_access_level = role_suggestion['match'].get('report_access_level', 'Department')
+                report_access_level = role_suggestion['match'].get('value', 'Department')
                 logger.info(f"AI matched job title '{user.job_title}' to Report Access Level: {report_access_level}")
             else:
                 logger.warning(f"No AI match for job title '{user.job_title}', using default: Department")

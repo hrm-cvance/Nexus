@@ -1,88 +1,88 @@
 {
   "title_mappings": [
     {
-      "title": "Loan Officer",
-      "report_access_level": "User",
-      "keywords": ["loan officer", "lo", "originator", "mlO"]
+      "value": "User",
+      "description": "Loan Officer",
+      "keywords": ["loan officer", "lo", "originator", "mlo"]
     },
     {
-      "title": "Loan Officer Assistant",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Loan Officer Assistant",
       "keywords": ["loan officer assistant", "loa", "assistant"]
     },
     {
-      "title": "Loan Setup",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Loan Setup",
       "keywords": ["loan setup", "setup"]
     },
     {
-      "title": "Loan Processor",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Loan Processor",
       "keywords": ["loan processor", "processor", "lp"]
     },
     {
-      "title": "Loan Coordinator",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Loan Coordinator",
       "keywords": ["loan coordinator", "coordinator"]
     },
     {
-      "title": "Operations Manager",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Operations Manager",
       "keywords": ["operations manager", "ops manager"]
     },
     {
-      "title": "Office Manager",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Office Manager",
       "keywords": ["office manager"]
     },
     {
-      "title": "Branch Manager",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Branch Manager",
       "keywords": ["branch manager"]
     },
     {
-      "title": "Sales Manager",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Sales Manager",
       "keywords": ["sales manager"]
     },
     {
-      "title": "Area Manager",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Area Manager",
       "keywords": ["area manager"]
     },
     {
-      "title": "Underwriter",
-      "report_access_level": "Company",
+      "value": "Company",
+      "description": "Underwriter",
       "keywords": ["underwriter", "uw"]
     },
     {
-      "title": "Appraisal Desk",
-      "report_access_level": "No",
+      "value": "No",
+      "description": "Appraisal Desk",
       "keywords": ["appraisal desk", "appraisal"]
     },
     {
-      "title": "Closer",
-      "report_access_level": "No",
+      "value": "No",
+      "description": "Closer",
       "keywords": ["closer", "closing"]
     },
     {
-      "title": "LockDesk",
-      "report_access_level": "No",
+      "value": "No",
+      "description": "LockDesk",
       "keywords": ["lock desk", "lockdesk", "lock"]
     },
     {
-      "title": "Insuring",
-      "report_access_level": "No",
+      "value": "No",
+      "description": "Insuring",
       "keywords": ["insuring", "insurance"]
     },
     {
-      "title": "Post Closer",
-      "report_access_level": "No",
+      "value": "No",
+      "description": "Post Closer",
       "keywords": ["post closer", "post closing", "post-closer"]
     }
   ],
   "default": {
-    "report_access_level": "User",
+    "value": "Department",
     "note": "Default for unmatched titles"
   }
 }
