@@ -519,7 +519,11 @@ class AutomationStatusTab:
             if not partnerscredit_mapping:
                 raise Exception("Partners Credit vendor mapping not found")
 
+            # Build config path
+            config_dir = self.config_manager.project_root
             config_path = config_dir / partnerscredit_mapping['vendor_config']
+
+            logger.info(f"Using config: {config_path}")
 
             # Add status message
             self._add_vendor_message(vendor.name, "Starting Partners Credit automation...")
