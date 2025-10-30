@@ -80,6 +80,10 @@ class PartnersCreditAutomation:
             await self._login()
             result['messages'].append("✓ Logged in successfully")
 
+            # Handle MFA
+            await self._handle_mfa()
+            result['messages'].append("✓ MFA completed")
+
             # Navigate to Admin -> User Admin
             await self._navigate_to_user_admin()
             result['messages'].append("✓ Navigated to User Admin")
@@ -238,6 +242,91 @@ class PartnersCreditAutomation:
         # Take screenshot after login
         await self.page.screenshot(path='partnerscredit_after_login.png')
         logger.info("Login completed")
+
+    async def _handle_mfa(self):
+        """Handle MFA public/private computer selection and wait for text code entry"""
+        logger.info("Checking for MFA prompt...")
+
+        # Wait a moment for MFA page to load
+        await asyncio.sleep(2)
+
+        # Take screenshot to see MFA page
+        await self.page.screenshot(path='partnerscredit_mfa_page.png')
+
+        # Check if we're on MFA page (look for public/private computer options)
+        try:
+            # Look for radio buttons or options related to public/private computer
+            # Try to find and click "Private Computer" option
+            private_computer_clicked = False
+
+            for selector in [
+                'input[type="radio"][value*="private"]',
+                'input[type="radio"][value*="Private"]',
+                'input[id*="private"]',
+                'input[id*="Private"]',
+                'label:has-text("Private")',
+                'label:has-text("private")'
+            ]:
+                try:
+                    element = await self.page.query_selector(selector)
+                    if element:
+                        await self.page.click(selector)
+                        logger.info(f"Selected private computer option with selector: {selector}")
+                        private_computer_clicked = True
+                        break
+                except:
+                    continue
+
+            if not private_computer_clicked:
+                logger.warning("Could not find private computer option, may not be on MFA page")
+
+            await asyncio.sleep(1)
+
+            # Take screenshot after selecting private
+            await self.page.screenshot(path='partnerscredit_mfa_private_selected.png')
+
+            # Now wait for user to manually enter the text code
+            logger.info("Waiting for manual MFA code entry...")
+            logger.info("Please check your phone for the text message code and enter it")
+
+            # Poll for MFA completion by looking for dashboard or admin elements
+            max_wait_time = 300  # 5 minutes
+            check_interval = 2  # Check every 2 seconds
+            elapsed_time = 0
+
+            success_indicators = [
+                'text="Admin"',
+                'text="Dashboard"',
+                'a:has-text("Admin")',
+                'a:has-text("Dashboard")'
+            ]
+
+            while elapsed_time < max_wait_time:
+                await asyncio.sleep(check_interval)
+                elapsed_time += check_interval
+
+                # Check for success indicators
+                for indicator in success_indicators:
+                    try:
+                        element = await self.page.query_selector(indicator)
+                        if element and await element.is_visible():
+                            logger.info(f"✓ MFA completed - found: {indicator}")
+                            await self.page.screenshot(path='partnerscredit_mfa_complete.png')
+                            return
+                    except:
+                        continue
+
+                # Log progress every 30 seconds
+                if elapsed_time % 30 == 0:
+                    logger.info(f"Still waiting for MFA completion... ({elapsed_time}s elapsed)")
+
+            # Timeout
+            raise Exception("MFA completion timeout - user did not complete MFA within 5 minutes")
+
+        except Exception as e:
+            logger.error(f"MFA handling error: {e}")
+            await self.page.screenshot(path='partnerscredit_mfa_error.png')
+            raise
 
     async def _navigate_to_user_admin(self):
         """Navigate to Admin -> User Admin"""

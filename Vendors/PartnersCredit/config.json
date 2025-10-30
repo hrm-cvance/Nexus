@@ -41,6 +41,16 @@
     ]
   },
   "mfa": {
-    "enabled": false
+    "enabled": true,
+    "type": "text_message",
+    "wait_timeout": 300000,
+    "check_interval": 2000,
+    "success_indicators": [
+      "text=\"Admin\"",
+      "text=\"Dashboard\"",
+      "a:has-text(\"Admin\")",
+      "a:has-text(\"Dashboard\")"
+    ],
+    "notes": "After login, select 'Private Computer' option and manually enter text message code"
   }
 }
