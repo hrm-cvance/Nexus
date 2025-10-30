@@ -162,9 +162,10 @@ class PartnersCreditAutomation:
         first_name = user.given_name or user.display_name.split()[0]
         last_name = user.surname or user.display_name.split()[-1]
 
-        # Phone number without dashes
+        # Phone number - cell phone only, digits only (no spaces, dashes, or other characters)
         phone = user.mobile_phone or (user.business_phones[0] if user.business_phones else "")
-        phone_clean = phone.replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+        # Remove all non-numeric characters
+        phone_clean = ''.join(filter(str.isdigit, phone))
 
         # Email
         email = user.mail or user.user_principal_name
