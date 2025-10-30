@@ -386,7 +386,7 @@ class PartnersCreditAutomation:
         logger.info("Filling user form...")
 
         # Wait for form to be ready
-        await self.page.wait_for_selector('input', timeout=10000)
+        await self.page.wait_for_selector('#content_ctl00_rpUserEntries_txtFirstName_0', timeout=10000)
         await asyncio.sleep(1)
 
         # Save HTML for inspection
@@ -395,62 +395,48 @@ class PartnersCreditAutomation:
             f.write(html_content)
 
         # Fill First Name
-        await self.page.fill('input[id*="First"], input[name*="First"]', user_data['firstName'])
+        await self.page.fill('#content_ctl00_rpUserEntries_txtFirstName_0', user_data['firstName'])
         logger.info(f"Filled First Name: {user_data['firstName']}")
 
         # Fill Last Name
-        await self.page.fill('input[id*="Last"], input[name*="Last"]', user_data['lastName'])
+        await self.page.fill('#content_ctl00_rpUserEntries_txtLastName_0', user_data['lastName'])
         logger.info(f"Filled Last Name: {user_data['lastName']}")
 
         # Fill Phone Number
-        await self.page.fill('input[id*="Phone"], input[name*="Phone"]', user_data['phoneNumber'])
+        await self.page.fill('#content_ctl00_rpUserEntries_txtPhone_0', user_data['phoneNumber'])
         logger.info(f"Filled Phone Number: {user_data['phoneNumber']}")
 
         # Fill Email Address
-        await self.page.fill('input[id*="Email"], input[name*="Email"]', user_data['email'])
+        await self.page.fill('#content_ctl00_rpUserEntries_txtEmail_0', user_data['email'])
         logger.info(f"Filled Email: {user_data['email']}")
 
-        # Fill Title (optional field)
-        try:
-            await self.page.fill('input[id*="Title"], input[name*="Title"]', user_data['title'])
-            logger.info(f"Filled Title: {user_data['title']}")
-        except:
-            logger.warning("Could not fill Title field")
+        # Fill Title
+        await self.page.fill('#content_ctl00_rpUserEntries_txtUserTitle_0', user_data['title'])
+        logger.info(f"Filled Title: {user_data['title']}")
 
         # Select Report Access Level (radio button) - Company, Department, or User
         report_access_level = user_data['reportAccessLevel']
 
-        # Try to click the radio button for the selected Report Access Level
-        radio_selectors = [
-            f'input[type="radio"][value="{report_access_level}"]',
-            f'#rdoReportAccessLevel{report_access_level}',
-            f'input[type="radio"][id*="{report_access_level}"]'
-        ]
+        # Map report access level to the exact radio button ID
+        radio_button_map = {
+            'Company': '#content_ctl00_rpUserEntries_rblPermList_0_0_0',
+            'Department': '#content_ctl00_rpUserEntries_rblPermList_0_1_0',
+            'User': '#content_ctl00_rpUserEntries_rblPermList_0_2_0'
+        }
 
-        radio_clicked = False
-        for selector in radio_selectors:
-            try:
-                await self.page.click(selector)
-                radio_clicked = True
-                logger.info(f"Selected Report Access Level: {report_access_level}")
-                break
-            except:
-                continue
-
-        if not radio_clicked:
-            # Fallback: try clicking near text
-            try:
-                await self.page.click(f'label:has-text("{report_access_level}")')
-                logger.info(f"Selected Report Access Level: {report_access_level} (via label)")
-            except:
-                logger.warning(f"Could not select Report Access Level: {report_access_level}, may need manual selection")
+        if report_access_level in radio_button_map:
+            await self.page.click(radio_button_map[report_access_level])
+            logger.info(f"Selected Report Access Level: {report_access_level}")
+        else:
+            logger.warning(f"Unknown Report Access Level: {report_access_level}, defaulting to Department")
+            await self.page.click('#content_ctl00_rpUserEntries_rblPermList_0_1_0')
 
         # Select Department from dropdown
         await self.page.select_option('select', label=user_data['department'])
         logger.info(f"Selected Department: {user_data['department']}")
 
         # Fill Comments
-        await self.page.fill('textarea, input[id*="Comment"], input[name*="Comment"]', user_data['comments'])
+        await self.page.fill('#content_ctl00_rpUserEntries_txtComments_0', user_data['comments'])
         logger.info(f"Filled Comments: {user_data['comments']}")
 
         # Take screenshot of filled form
@@ -461,8 +447,8 @@ class PartnersCreditAutomation:
         """Submit the user request"""
         logger.info("Submitting user request...")
 
-        # Click Request New Users button
-        await self.page.click('button:has-text("Request"), input[value*="Request"]')
+        # Click Request New Users button (exact ID from user)
+        await self.page.click('#content_ctl00_btnCreateUsers')
         await self.page.wait_for_load_state('networkidle')
         await asyncio.sleep(2)
 
