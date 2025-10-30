@@ -329,29 +329,21 @@ class PartnersCreditAutomation:
         """Input number of users and click Next"""
         logger.info(f"Setting number of users to {num_users}...")
 
-        # Find the input field for number of users
-        await self.page.wait_for_selector('input[type="text"], input[type="number"]', timeout=10000)
+        # Wait for the specific input field
+        await self.page.wait_for_selector('#content_ctl00_txtUserTotal', timeout=10000)
 
         # Fill number of users
-        number_input_filled = False
-        for selector in ['input[type="number"]', 'input[type="text"]']:
-            try:
-                await self.page.fill(selector, str(num_users))
-                number_input_filled = True
-                logger.info(f"Filled number of users with selector: {selector}")
-                break
-            except:
-                continue
-
-        if not number_input_filled:
-            raise Exception("Could not find number of users input")
+        await self.page.fill('#content_ctl00_txtUserTotal', str(num_users))
+        logger.info(f"Filled number of users: {num_users}")
 
         # Click Next button
-        await self.page.click('button:has-text("Next"), input[value="Next"]')
+        await self.page.click('#content_ctl00_btnGenUserBoxes')
+        logger.info("Clicked Next button")
+
         await self.page.wait_for_load_state('networkidle')
         await asyncio.sleep(1)
 
-        # Take screenshot
+        # Take screenshot of the user form
         await self.page.screenshot(path='partnerscredit_user_form.png')
         logger.info("Number of users set, form loaded")
 
