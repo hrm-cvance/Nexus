@@ -1,0 +1,22 @@
+{
+  "vendor": {
+    "name": "TheWorkNumber",
+    "display_name": "The Work Number (Equifax)",
+    "keyvault_secrets": {
+      "login_url": "theworknumber-login-url",
+      "admin_username": "theworknumber-admin-username",
+      "admin_password": "theworknumber-admin-password"
+    }
+  },
+  "organization": {
+    "name": "Highlands Residential Mortgages",
+    "id": "82989"
+  },
+  "location": {
+    "name": "Highlands Residential Mortgage",
+    "id": "339552"
+  },
+  "user_settings": {
+    "username_format": "firstname.lastname"
+  }
+}

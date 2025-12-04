@@ -59,6 +59,16 @@
       "vendor_config": "Vendors/PartnersCredit/config.json",
       "automation_module": "automation.vendors.partnerscredit",
       "enabled": true
+    },
+    {
+      "entra_group_name": "TheWorkNumber_Users",
+      "entra_group_id": "",
+      "vendor_name": "TheWorkNumber",
+      "vendor_display_name": "The Work Number",
+      "vendor_logo": "Vendors/TheWorkNumber/logo.png",
+      "vendor_config": "Vendors/TheWorkNumber/config.json",
+      "automation_module": "automation.vendors.theworknumber",
+      "enabled": true
     }
   ],
   "metadata": {
