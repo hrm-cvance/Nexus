@@ -37,7 +37,9 @@
       "Bash(git restore:*)",
       "Read(//c/Users/CVance.HRM/Desktop/**)",
       "Bash(git log:*)",
-      "Bash(1)"
+      "Bash(1)",
+      "Bash(find:*)",
+      "Bash(claude mcp add playwright npx @playwright/mcp@latest)"
     ],
     "deny": [],
     "ask": []
