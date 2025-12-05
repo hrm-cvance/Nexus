@@ -217,6 +217,8 @@ class AutomationStatusTab:
                     await self._run_partnerscredit_automation(vendor)
                 elif vendor.name == "TheWorkNumber":
                     await self._run_theworknumber_automation(vendor)
+                elif vendor.name == "MMI":
+                    await self._run_mmi_automation(vendor)
                 else:
                     # Unknown vendor
                     self._add_vendor_message(vendor.name, f"✗ Unknown vendor: {vendor.name}")
@@ -599,6 +601,54 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"The Work Number automation error: {e}")
+            self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
+            self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+    async def _run_mmi_automation(self, vendor: VendorConfig):
+        """Run MMI (Mortgage Market Intelligence) automation"""
+        try:
+            from automation.vendors.mmi import provision_user
+
+            # Get config path
+            vendor_mappings = self.config_manager.get_enabled_vendors()
+            mmi_mapping = next(
+                (m for m in vendor_mappings if m['vendor_name'] == 'MMI'),
+                None
+            )
+
+            if not mmi_mapping:
+                raise Exception("MMI vendor mapping not found")
+
+            # Build config path
+            config_dir = self.config_manager.project_root
+            config_path = config_dir / mmi_mapping['vendor_config']
+
+            logger.info(f"Using config: {config_path}")
+
+            # Add status message
+            self._add_vendor_message(vendor.name, "Starting MMI automation...")
+
+            # Run automation
+            result = await provision_user(self.current_user, str(config_path))
+
+            # Display results
+            for msg in result.get('messages', []):
+                self._add_vendor_message(vendor.name, msg)
+
+            for warning in result.get('warnings', []):
+                self._add_vendor_message(vendor.name, warning, color="orange")
+
+            for error in result.get('errors', []):
+                self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
+
+            # Update final status
+            if result['success']:
+                self._update_vendor_status(vendor.name, "success", "✓ Complete")
+            else:
+                self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        except Exception as e:
+            logger.error(f"MMI automation error: {e}")
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 

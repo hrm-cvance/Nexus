@@ -69,6 +69,16 @@
       "vendor_config": "Vendors/TheWorkNumber/config.json",
       "automation_module": "automation.vendors.theworknumber",
       "enabled": true
+    },
+    {
+      "entra_group_name": "MMI_Users",
+      "entra_group_id": "",
+      "vendor_name": "MMI",
+      "vendor_display_name": "MMI - Mortgage Market Intelligence",
+      "vendor_logo": "Vendors/MMI/logo.png",
+      "vendor_config": "Vendors/MMI/config.json",
+      "automation_module": "automation.vendors.mmi",
+      "enabled": true
     }
   ],
   "metadata": {

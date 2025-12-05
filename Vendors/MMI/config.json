@@ -1,0 +1,37 @@
+{
+  "vendor": {
+    "name": "MMI",
+    "display_name": "MMI - Mortgage Market Intelligence",
+    "keyvault_secrets": {
+      "login_url": "mmi-login-url",
+      "admin_username": "mmi-admin-username",
+      "admin_password": "mmi-admin-password"
+    }
+  },
+  "user_settings": {
+    "phone_format": "digits_only",
+    "nmls_required": false
+  },
+  "permissions": {
+    "loan_officer_default": [
+      "Agent Tracking Alerts",
+      "Builder Research",
+      "Loan Officer Tools",
+      "Manual Property Monitoring",
+      "Past Property Tracking Alerts",
+      "Property/County research",
+      "Title Explorer",
+      "View LO Contact Details"
+    ],
+    "branch_manager_additional": [
+      "Company Wallet Share"
+    ],
+    "executive_additional": [
+      "Wholesale Insights"
+    ]
+  },
+  "mfa": {
+    "enabled": false,
+    "notes": "SSO login - may require manual authentication on first use"
+  }
+}
