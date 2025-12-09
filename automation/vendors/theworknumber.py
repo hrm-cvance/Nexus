@@ -570,6 +570,81 @@ class TheWorkNumberAutomation:
         await self.page.screenshot(path='theworknumber_user_management.png')
         logger.info("Navigated to User Management")
 
+    async def _dismiss_tour(self):
+        """Dismiss any tour/walkthrough popups that may appear"""
+        logger.info("Checking for tour popups...")
+        print("Checking for tour popups...")
+
+        # The tour uses apc-spotlight overlay and tooltip-style popups
+        # We need to click through each step of the tour
+        max_attempts = 10  # Handle multi-step tours
+
+        for attempt in range(max_attempts):
+            tour_dismissed = False
+
+            # First check if there's a spotlight overlay blocking clicks
+            spotlight = await self.page.query_selector('.apc-spotlight')
+            if spotlight:
+                print(f"  Found apc-spotlight overlay (attempt {attempt + 1})")
+                logger.info(f"Found apc-spotlight overlay (attempt {attempt + 1})")
+
+            # Check for tour popup elements - try multiple selectors
+            tour_selectors = [
+                # Primary: Look for Next button in tour tooltip
+                'button:has-text("Next")',
+                # Skip/close options
+                'button:has-text("Skip")',
+                'button:has-text("Got it")',
+                'button:has-text("Done")',
+                'button:has-text("Close")',
+                # Generic close buttons
+                '[aria-label="Close"]',
+                '.tour-close',
+                # Fallback: any button in popover/tooltip
+                '.popover button',
+                '[role="tooltip"] button',
+            ]
+
+            for selector in tour_selectors:
+                try:
+                    elements = await self.page.query_selector_all(selector)
+                    for element in elements:
+                        if element and await element.is_visible():
+                            try:
+                                btn_text = await element.inner_text()
+                            except:
+                                btn_text = ""
+
+                            # Click the button
+                            await element.click()
+                            tour_dismissed = True
+                            print(f"  Clicked tour button: '{btn_text}' ({selector})")
+                            logger.info(f"Clicked tour button: '{btn_text}' ({selector})")
+                            await asyncio.sleep(0.5)
+                            break
+                except Exception as e:
+                    continue
+
+                if tour_dismissed:
+                    break
+
+            if not tour_dismissed:
+                # No more tour popups found
+                print("  No more tour elements found")
+                break
+
+            await asyncio.sleep(0.5)
+
+        # Final check - verify spotlight is gone
+        spotlight = await self.page.query_selector('.apc-spotlight')
+        if spotlight:
+            print("  WARNING: apc-spotlight still present after dismissal attempts")
+            logger.warning("apc-spotlight still present after tour dismissal")
+        else:
+            print("  Tour dismissed successfully")
+
+        logger.info("Tour check complete")
+
     async def _click_add_user(self):
         """Click Add User button"""
         logger.info("Clicking Add User...")
@@ -579,6 +654,21 @@ class TheWorkNumberAutomation:
 
         # Take screenshot before clicking Add User
         await self.page.screenshot(path='theworknumber_before_add_user.png')
+
+        # First, dismiss any tour popups that may be blocking
+        await self._dismiss_tour()
+
+        # Take screenshot after dismissing tour
+        await self.page.screenshot(path='theworknumber_after_tour_dismiss.png')
+
+        # Wait for any loading spinner to disappear
+        print("Waiting for page to finish loading...")
+        for _ in range(30):  # Wait up to 15 seconds
+            loader = await self.page.query_selector('.loader-backdrop')
+            if not loader:
+                break
+            print("  Loading spinner still present, waiting...")
+            await asyncio.sleep(0.5)
 
         # Wait for Add User button to be visible
         try:

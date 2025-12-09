@@ -12,14 +12,73 @@ Shows real-time status of account provisioning automation:
 import customtkinter as ctk
 import asyncio
 import threading
-from typing import List, Dict, Any, Optional
+import subprocess
+import sys
+from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
+from datetime import datetime
 from models.user import EntraUser
 from models.vendor import VendorConfig
+from models.automation_result import AutomationSummary, VendorResult
 from services.config_manager import ConfigManager
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def is_playwright_browser_installed() -> tuple[bool, str]:
+    """
+    Check if Playwright browsers are installed.
+
+    Returns:
+        Tuple of (is_installed, error_message)
+    """
+    try:
+        # Check if chromium executable exists in expected location
+        import platform
+        home = Path.home()
+
+        if platform.system() == "Windows":
+            playwright_path = home / "AppData" / "Local" / "ms-playwright"
+        else:
+            playwright_path = home / ".cache" / "ms-playwright"
+
+        if not playwright_path.exists():
+            return False, "Playwright browsers not installed. Run: playwright install chromium"
+
+        # Check for any chromium folder
+        chromium_folders = list(playwright_path.glob("chromium-*"))
+        if not chromium_folders:
+            return False, "Chromium browser not installed. Run: playwright install chromium"
+
+        return True, ""
+    except Exception as e:
+        logger.warning(f"Could not check Playwright installation: {e}")
+        return True, ""  # Assume installed, let it fail naturally if not
+
+
+def detect_playwright_error(error_message: str) -> tuple[bool, str]:
+    """
+    Detect if an error is related to Playwright browser installation.
+
+    Returns:
+        Tuple of (is_playwright_error, user_friendly_message)
+    """
+    error_lower = str(error_message).lower()
+
+    if "executable doesn't exist" in error_lower or "browsertype.launch" in error_lower:
+        return True, (
+            "Playwright browser not installed. "
+            "Please run 'playwright install chromium' in terminal and try again."
+        )
+
+    if "playwright" in error_lower and "install" in error_lower:
+        return True, (
+            "Playwright needs to be updated. "
+            "Please run 'playwright install' in terminal and try again."
+        )
+
+    return False, str(error_message)
 
 
 class AutomationStatusTab:
@@ -28,14 +87,17 @@ class AutomationStatusTab:
     def __init__(
         self,
         parent: ctk.CTkFrame,
-        config_manager: ConfigManager
+        config_manager: ConfigManager,
+        on_view_summary: Optional[Callable] = None
     ):
         self.parent = parent
         self.config_manager = config_manager
+        self.on_view_summary = on_view_summary
 
         self.current_user: Optional[EntraUser] = None
         self.vendors: List[VendorConfig] = []
         self.vendor_status: Dict[str, Dict[str, Any]] = {}
+        self.automation_summary: Optional[AutomationSummary] = None
 
         # Create UI
         self._create_ui()
@@ -85,16 +147,16 @@ class AutomationStatusTab:
         self.actions_frame = ctk.CTkFrame(self.main_scroll, fg_color="transparent")
         self.actions_frame.pack(fill="x", pady=(20, 0))
 
-        # Done button (hidden initially)
+        # View Summary button (hidden initially)
         self.done_btn = ctk.CTkButton(
             self.actions_frame,
-            text="Done",
-            command=self._on_done_clicked,
-            width=150,
+            text="View Summary \u2192",
+            command=self._on_view_summary_clicked,
+            width=180,
             height=45,
             font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="green",
-            hover_color="dark green"
+            hover_color="#006400"
         )
         # Don't pack yet - will show when automation completes
 
@@ -110,6 +172,12 @@ class AutomationStatusTab:
 
         self.current_user = user
         self.vendors = vendors
+
+        # Initialize automation summary
+        self.automation_summary = AutomationSummary(
+            user=user,
+            start_time=datetime.now()
+        )
 
         # Update header
         self.subtitle_label.configure(
@@ -195,6 +263,29 @@ class AutomationStatusTab:
         """Run automation for all vendors"""
         logger.info("Running automation...")
 
+        # Check if Playwright browsers are installed before starting
+        is_installed, install_error = is_playwright_browser_installed()
+        if not is_installed:
+            logger.error(f"Playwright check failed: {install_error}")
+            # Mark all vendors as failed with the same error
+            for vendor in self.vendors:
+                self._add_vendor_message(vendor.name, f"✗ {install_error}", color="red")
+                self._update_vendor_status(vendor.name, "error", "✗ Setup Required")
+
+                # Create vendor result for summary
+                vendor_result = VendorResult(
+                    vendor_name=vendor.name,
+                    display_name=vendor.display_name,
+                    success=False,
+                    start_time=datetime.now(),
+                    end_time=datetime.now(),
+                    errors=[install_error]
+                )
+                self.automation_summary.vendor_results.append(vendor_result)
+
+            self._on_automation_complete()
+            return
+
         for vendor in self.vendors:
             logger.info(f"Processing vendor: {vendor.name}")
 
@@ -226,7 +317,9 @@ class AutomationStatusTab:
 
             except Exception as e:
                 logger.error(f"Error processing vendor {vendor.name}: {e}")
-                self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}")
+                # Check if this is a Playwright installation error
+                is_pw_error, friendly_msg = detect_playwright_error(str(e))
+                self._add_vendor_message(vendor.name, f"✗ Error: {friendly_msg}", color="red")
                 self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
         # All done
@@ -235,6 +328,13 @@ class AutomationStatusTab:
 
     async def _run_accountchek_automation(self, vendor: VendorConfig):
         """Run AccountChek automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             # Import automation module
             from automation.vendors.accountchek import provision_user
@@ -284,11 +384,15 @@ class AutomationStatusTab:
                         color="cyan"
                     )
 
-            # Add errors
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -296,11 +400,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"AccountChek automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_bankvod_automation(self, vendor: VendorConfig):
         """Run BankVOD automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             # Import automation module
             from automation.vendors.bankvod import provision_user
@@ -338,11 +454,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Add errors
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -350,11 +470,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"BankVOD automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_clearcapital_automation(self, vendor: VendorConfig):
         """Run ClearCapital automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             # Import automation module
             from automation.vendors.clearcapital import provision_user
@@ -392,11 +524,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Add errors
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -404,11 +540,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"ClearCapital automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_dataverify_automation(self, vendor: VendorConfig):
         """Run DataVerify automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             # Import automation module
             from automation.vendors.dataverify import provision_user
@@ -446,11 +594,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Add errors
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -458,11 +610,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"DataVerify automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_certifiedcredit_automation(self, vendor: VendorConfig):
         """Run Certified Credit automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             # Import automation module
             from automation.vendors.certifiedcredit import provision_user
@@ -494,10 +658,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -505,11 +674,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"Certified Credit automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_partnerscredit_automation(self, vendor: VendorConfig):
         """Run Partners Credit automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             from automation.vendors.partnerscredit import provision_user
 
@@ -542,10 +723,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -553,11 +739,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"Partners Credit automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_theworknumber_automation(self, vendor: VendorConfig):
         """Run The Work Number automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             from automation.vendors.theworknumber import provision_user
 
@@ -590,10 +788,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -601,11 +804,23 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"The Work Number automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
 
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
     async def _run_mmi_automation(self, vendor: VendorConfig):
         """Run MMI (Mortgage Market Intelligence) automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
         try:
             from automation.vendors.mmi import provision_user
 
@@ -638,10 +853,15 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            for error in result.get('errors', []):
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
                 self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
 
-            # Update final status
+            # Update result and status
+            vendor_result.success = result['success']
             if result['success']:
                 self._update_vendor_status(vendor.name, "success", "✓ Complete")
             else:
@@ -649,8 +869,13 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"MMI automation error: {e}")
+            vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
 
     def _update_vendor_status(self, vendor_name: str, status: str, status_text: str):
         """Update vendor status in UI (thread-safe)"""
@@ -697,6 +922,10 @@ class AutomationStatusTab:
         def update():
             logger.info("All automation tasks complete")
 
+            # Set end time on summary
+            if self.automation_summary:
+                self.automation_summary.end_time = datetime.now()
+
             # Show done button
             self.done_btn.pack(side="right", padx=20)
 
@@ -716,10 +945,11 @@ class AutomationStatusTab:
         # Schedule UI update on main thread
         self.parent.after(0, update)
 
-    def _on_done_clicked(self):
-        """Handle done button click"""
-        logger.info("Automation session complete")
-        # TODO: Navigate back to user search or show summary
+    def _on_view_summary_clicked(self):
+        """Handle View Summary button click"""
+        logger.info("Navigating to summary tab")
+        if self.on_view_summary and self.automation_summary:
+            self.on_view_summary(self.automation_summary)
 
     def clear(self):
         """Clear automation status"""

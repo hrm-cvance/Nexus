@@ -17,6 +17,7 @@ from services.msal_credential_adapter import MSALCredentialAdapter
 from gui.tab_search import UserSearchTab
 from gui.tab_provisioning import AccountProvisioningTab
 from gui.tab_automation import AutomationStatusTab
+from gui.tab_summary import SummaryTab
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -145,7 +146,7 @@ class NexusMainWindow(ctk.CTk):
         self.tabview.add("User Search")
         self.tabview.add("Account Provisioning")
         self.tabview.add("Automation Status")
-        self.tabview.add("Settings")
+        self.tabview.add("Summary")
 
         # Initialize Tab 1: User Search
         self.tab_search = UserSearchTab(
@@ -166,11 +167,16 @@ class NexusMainWindow(ctk.CTk):
         # Initialize Tab 3: Automation Status
         self.tab_automation = AutomationStatusTab(
             parent=self.tabview.tab("Automation Status"),
-            config_manager=self.config_manager
+            config_manager=self.config_manager,
+            on_view_summary=self._on_view_summary
         )
 
-        # Placeholders for other tabs
-        self._create_placeholder_tab(self.tabview.tab("Settings"), "Settings")
+        # Initialize Tab 4: Summary
+        self.tab_summary = SummaryTab(
+            parent=self.tabview.tab("Summary"),
+            config_manager=self.config_manager,
+            on_new_automation=self._on_new_automation
+        )
 
     def _create_placeholder_tab(self, parent, tab_name):
         """Create placeholder for tabs not yet implemented"""
@@ -203,6 +209,29 @@ class NexusMainWindow(ctk.CTk):
 
         # Start the automation
         self.tab_automation.start_automation(user, vendors)
+
+    def _on_view_summary(self, automation_summary):
+        """Callback when View Summary is clicked from Automation tab"""
+        logger.info(f"Viewing summary for {automation_summary.user.display_name}")
+
+        # Load summary in summary tab
+        self.tab_summary.load_summary(automation_summary)
+
+        # Switch to Summary tab
+        self.tabview.set("Summary")
+
+    def _on_new_automation(self):
+        """Callback when Start New Automation is clicked from Summary tab"""
+        logger.info("Starting new automation session")
+
+        # Clear summary tab
+        self.tab_summary.clear()
+
+        # Clear automation tab
+        self.tab_automation.clear()
+
+        # Switch to User Search tab
+        self.tabview.set("User Search")
 
     def _show_config_error(self, errors: list):
         """Show configuration error dialog"""
