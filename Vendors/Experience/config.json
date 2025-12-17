@@ -1,0 +1,76 @@
+{
+  "_comment": "All credentials stored in Azure Key Vault",
+  "vendor": {
+    "name": "Experience",
+    "display_name": "Experience.com",
+    "keyvault_secrets": {
+      "login_url": "experience-login-url",
+      "admin_email": "experience-admin-email",
+      "admin_password": "experience-admin-password"
+    }
+  },
+  "defaults": {
+    "opt_in_to_login": true,
+    "allow_survey_completion": true,
+    "_note_expire_survey": "Allow user to expire Survey toggle has been removed from UI",
+    "allow_reply_to_reviews": true,
+    "minimum_score_to_reply": 3,
+    "allow_reply_using_ai": true,
+    "allow_autopost": true,
+    "autopost_minimum_score": 4.5,
+    "autopost_max_per_day": 3,
+    "autopost_min_gap_hours": 2
+  },
+  "role_mapping": {
+    "_comment": "Tier Manager: Branch/Sales/Regional Manager and above. User: Loan Officer/LOA and others",
+    "default": "User",
+    "manager_keywords": [
+      "branch manager",
+      "sales manager",
+      "regional manager",
+      "division manager",
+      "area manager",
+      "district manager",
+      "vp",
+      "vice president",
+      "director",
+      "president",
+      "ceo",
+      "coo",
+      "cfo",
+      "chief",
+      "executive",
+      "svp",
+      "senior vice president",
+      "evp",
+      "managing director"
+    ],
+    "roles": {
+      "manager": "Tier Manager",
+      "default": "User"
+    }
+  },
+  "tier_mapping": {
+    "_comment": "Map office_location or cost center to Experience.com tier (branch)",
+    "default_tier": "Plano"
+  },
+  "workflow": {
+    "steps": [
+      "login",
+      "navigate_to_users",
+      "click_add_new_user",
+      "select_add_single_user",
+      "fill_basic_info",
+      "configure_toggles",
+      "select_tier_and_role",
+      "click_create_user",
+      "click_confirm",
+      "publish_user_profile"
+    ]
+  },
+  "mfa": {
+    "enabled": false,
+    "type": null,
+    "notes": "Experience.com may require MFA - monitor during testing"
+  }
+}
