@@ -2,9 +2,10 @@
 Experience.com Automation Test Script
 
 This script automates the Experience.com user provisioning workflow.
-It performs login, user creation, profile settings configuration, and publishing.
+It performs login, user creation, profile settings configuration, publishing,
+widget code capture, profile URL capture, and profile info population.
 
-Based on the Experience User Guide PDF:
+Based on the Experience User Guide PDF (Pages 1-14):
 
 WORKFLOW:
 1. Login to https://app.experience.com/user/signin
@@ -40,6 +41,19 @@ WORKFLOW:
 
 7. Click "Update" -> "Confirm" to save settings
 8. Publish user profile (click "No" under Published -> Confirm)
+9. Capture Widget Code (for Bigfish website integration):
+   - Navigate to Widgets -> Review Widget -> Basic Review
+   - Filter By: User, Select User, Get Code
+   - Save to ~/Downloads/experience_widget_code_{user}.txt
+10. Capture Profile URL (for Total Expert CUSTOM FIELD 3):
+    - Navigate to Users -> View Profile
+    - Extract URL: https://pro.experience.com/reviews/{name}-{id}
+    - Save to ~/Downloads/experience_profile_url_{user}.txt
+11. Fill Profile Info fields (from Azure):
+    - Business Information > Title
+    - Contact Information > Phone, Mobile, Website URL
+    - Licenses > NMLS# {number}
+    - Images > Profile Photo (if available)
 """
 
 import asyncio
@@ -1761,6 +1775,891 @@ class ExperienceTestAutomation:
         await self.page.screenshot(path='experience_25_published.png')
         print("Screenshot: experience_25_published.png")
 
+    async def get_widget_code(self, user_name: str) -> str:
+        """Navigate to Widgets and capture the user's Review Widget embed code
+
+        Per Experience User Guide Pages 7-8:
+        1. Click "Widgets" in left sidebar menu
+        2. Click "Review Widget"
+        3. Click "Basic Review" tab
+        4. Click "User" radio button under "Filter By"
+        5. Click "Select User" dropdown and search/select user
+        6. Click "Get Code" button
+        7. Extract the code from the modal
+
+        Returns:
+            str: The widget embed code, or empty string if not found
+        """
+        print(f"\n{'='*60}")
+        print("STEP 8: Capture Widget Code for Bigfish")
+        print(f"{'='*60}")
+
+        widget_code = ""
+
+        try:
+            # Step 1: Click "Widgets" in left sidebar menu
+            print("\nNavigating to Widgets menu...")
+            widgets_selectors = [
+                'text="Widgets"',
+                '[class*="menu"] >> text="Widgets"',
+                'span:has-text("Widgets")',
+                'a:has-text("Widgets")',
+            ]
+
+            widgets_clicked = False
+            for selector in widgets_selectors:
+                try:
+                    widgets_el = await self.page.query_selector(selector)
+                    if widgets_el and await widgets_el.is_visible():
+                        await widgets_el.click()
+                        widgets_clicked = True
+                        print(f"  Clicked Widgets menu")
+                        await asyncio.sleep(2)
+                        break
+                except:
+                    continue
+
+            if not widgets_clicked:
+                print("  WARNING: Could not find Widgets menu")
+                return widget_code
+
+            await self.page.screenshot(path='experience_26_widgets_menu.png')
+            print("Screenshot: experience_26_widgets_menu.png")
+
+            # Step 2: Click "Review Widget"
+            print("\nLooking for Review Widget...")
+            review_widget_selectors = [
+                'text="Review Widget"',
+                'span:has-text("Review Widget")',
+                'a:has-text("Review Widget")',
+                '[class*="menu-item"]:has-text("Review Widget")',
+            ]
+
+            for selector in review_widget_selectors:
+                try:
+                    review_el = await self.page.query_selector(selector)
+                    if review_el and await review_el.is_visible():
+                        await review_el.click()
+                        print(f"  Clicked Review Widget")
+                        await asyncio.sleep(2)
+                        break
+                except:
+                    continue
+
+            await self.page.screenshot(path='experience_27_review_widget_page.png')
+            print("Screenshot: experience_27_review_widget_page.png")
+
+            # Step 3: Click "Basic Review" tab (may already be selected)
+            print("\nLooking for Basic Review tab...")
+            basic_review_selectors = [
+                'text="Basic Review"',
+                '[role="tab"]:has-text("Basic Review")',
+                'button:has-text("Basic Review")',
+            ]
+
+            for selector in basic_review_selectors:
+                try:
+                    basic_el = await self.page.query_selector(selector)
+                    if basic_el and await basic_el.is_visible():
+                        await basic_el.click()
+                        print(f"  Clicked Basic Review tab")
+                        await asyncio.sleep(1)
+                        break
+                except:
+                    continue
+
+            # Step 4: Click "User" radio button under "Filter By"
+            print("\nSelecting 'User' filter...")
+            user_radio_selectors = [
+                'input[type="radio"][value="user"]',
+                'input[type="radio"][value="User"]',
+                'label:has-text("User") >> input[type="radio"]',
+                '//*[contains(text(), "User")]/preceding-sibling::input[@type="radio"]',
+                '//*[contains(text(), "User")]/parent::label//input[@type="radio"]',
+                'text="User" >> xpath=../input[@type="radio"]',
+            ]
+
+            user_selected = False
+            for selector in user_radio_selectors:
+                try:
+                    radio = await self.page.query_selector(selector)
+                    if radio:
+                        await radio.click()
+                        user_selected = True
+                        print(f"  Selected User radio button")
+                        await asyncio.sleep(1)
+                        break
+                except:
+                    continue
+
+            if not user_selected:
+                # Try clicking the label text instead
+                try:
+                    user_label = await self.page.query_selector('label:has-text("User")')
+                    if user_label:
+                        await user_label.click()
+                        print(f"  Clicked User label")
+                        await asyncio.sleep(1)
+                except:
+                    pass
+
+            await self.page.screenshot(path='experience_28_filter_by_user.png')
+            print("Screenshot: experience_28_filter_by_user.png")
+
+            # Step 5: Click "Select User" dropdown and search/select user
+            print(f"\nSearching for user: {user_name}...")
+            select_user_selectors = [
+                '[placeholder="Please select"]',
+                'text="Select User" >> following::*[contains(@class, "select")][1]',
+                '[class*="ant-select"]:has-text("Select User")',
+                '[class*="ant-select"]:has-text("Please select")',
+                '.ant-select-selector',
+            ]
+
+            dropdown_opened = False
+            for selector in select_user_selectors:
+                try:
+                    dropdown = await self.page.query_selector(selector)
+                    if dropdown and await dropdown.is_visible():
+                        await dropdown.click()
+                        dropdown_opened = True
+                        print(f"  Opened user dropdown")
+                        await asyncio.sleep(1)
+                        break
+                except:
+                    continue
+
+            if dropdown_opened:
+                # Type to search for user
+                await self.page.keyboard.type(user_name)
+                await asyncio.sleep(2)
+
+                # Click the matching option - need to click the checkbox or row
+                # The dropdown shows user with checkbox that needs to be clicked
+                user_selected = False
+
+                # First try clicking the checkbox in the dropdown
+                checkbox_selectors = [
+                    f'input[type="checkbox"]:near(:text("{user_name}"))',
+                    f'//*[contains(text(), "{user_name}")]/preceding::input[@type="checkbox"][1]',
+                    f'//*[contains(text(), "{user_name}")]/ancestor::div[contains(@class, "option")]//input',
+                ]
+
+                for selector in checkbox_selectors:
+                    try:
+                        checkbox = await self.page.query_selector(selector)
+                        if checkbox and await checkbox.is_visible():
+                            await checkbox.click()
+                            user_selected = True
+                            print(f"  Selected user checkbox: {user_name}")
+                            await asyncio.sleep(2)
+                            break
+                    except:
+                        continue
+
+                # If checkbox didn't work, try clicking the row/option itself
+                if not user_selected:
+                    option_selectors = [
+                        f'[class*="ant-select-item"]:has-text("{user_name}")',
+                        f'[class*="option"]:has-text("{user_name}")',
+                        f'div:has-text("{user_name}"):has-text("noemail")',  # Row with partial email
+                        f'text="{user_name}"',
+                    ]
+
+                    for selector in option_selectors:
+                        try:
+                            options = await self.page.query_selector_all(selector)
+                            for option in options:
+                                if option and await option.is_visible():
+                                    await option.click()
+                                    user_selected = True
+                                    print(f"  Selected user row: {user_name}")
+                                    await asyncio.sleep(2)
+                                    break
+                            if user_selected:
+                                break
+                        except:
+                            continue
+
+            await self.page.screenshot(path='experience_29_user_selected.png')
+            print("Screenshot: experience_29_user_selected.png")
+
+            # Step 6: Click "Get Code" button
+            # Scroll down slightly to ensure button is visible
+            await self.page.evaluate('window.scrollBy(0, 200)')
+            await asyncio.sleep(0.5)
+
+            print("\nClicking Get Code button...")
+            get_code_selectors = [
+                'button:has-text("Get Code")',
+                'text="Get Code"',
+                '[class*="btn"]:has-text("Get Code")',
+            ]
+
+            for selector in get_code_selectors:
+                try:
+                    get_code_btn = await self.page.query_selector(selector)
+                    if get_code_btn and await get_code_btn.is_visible():
+                        await get_code_btn.click()
+                        print(f"  Clicked Get Code button")
+                        await asyncio.sleep(2)
+                        break
+                except:
+                    continue
+
+            await self.page.screenshot(path='experience_30_get_code_modal.png')
+            print("Screenshot: experience_30_get_code_modal.png")
+
+            # Step 7: Extract the code from the modal by clicking "Copy Code" button
+            print("\nExtracting widget code from modal...")
+
+            # Click the "Copy Code" button to copy to clipboard
+            copy_code_selectors = [
+                'button:has-text("Copy Code")',
+                'text="Copy Code"',
+                '[class*="btn"]:has-text("Copy Code")',
+            ]
+
+            copy_clicked = False
+            for selector in copy_code_selectors:
+                try:
+                    copy_btn = await self.page.query_selector(selector)
+                    if copy_btn and await copy_btn.is_visible():
+                        await copy_btn.click()
+                        copy_clicked = True
+                        print("  Clicked Copy Code button")
+                        await asyncio.sleep(1)
+                        break
+                except:
+                    continue
+
+            # Read from clipboard using browser's clipboard API
+            if copy_clicked:
+                try:
+                    # Grant clipboard permission and read
+                    widget_code = await self.page.evaluate('''async () => {
+                        try {
+                            return await navigator.clipboard.readText();
+                        } catch (e) {
+                            return null;
+                        }
+                    }''')
+                    if widget_code and '<div' in widget_code:
+                        print(f"  Extracted widget code from clipboard ({len(widget_code)} characters)")
+                except Exception as e:
+                    print(f"  Note: Could not read from clipboard: {e}")
+
+            # If clipboard didn't work, try getting from the modal's visible code
+            if not widget_code:
+                try:
+                    # Look for the specific code block pattern in page content
+                    page_content = await self.page.content()
+                    import re
+                    # Match the widget code pattern
+                    match = re.search(r"<div id='ss-custom-reviews-widget-root'>.*?</script>", page_content, re.DOTALL)
+                    if match:
+                        widget_code = match.group(0)
+                        print(f"  Extracted widget code from page content ({len(widget_code)} characters)")
+                except:
+                    pass
+
+            # Close the modal
+            close_selectors = [
+                'button:has-text("Close")',
+                '[class*="modal"] button:has-text("Close")',
+                '[class*="modal"] [class*="close"]',
+                '[class*="modal"] button[aria-label="Close"]',
+            ]
+
+            for selector in close_selectors:
+                try:
+                    close_btn = await self.page.query_selector(selector)
+                    if close_btn and await close_btn.is_visible():
+                        await close_btn.click()
+                        print("  Closed modal")
+                        await asyncio.sleep(1)
+                        break
+                except:
+                    continue
+
+            if widget_code:
+                print(f"\n  Widget Code Preview: {widget_code[:100]}...")
+            else:
+                print("  WARNING: Could not extract widget code")
+
+        except Exception as e:
+            print(f"  ERROR getting widget code: {e}")
+
+        return widget_code
+
+    async def get_profile_url(self, user_name: str) -> str:
+        """Navigate to user profile and capture the public profile URL
+
+        Per Experience User Guide Pages 8-10:
+        1. Navigate to Hierarchy → Users
+        2. Search for user
+        3. Click hamburger menu (three dots) → "View Profile"
+        4. Copy the "Visit user profile" URL
+
+        Returns:
+            str: The profile URL (e.g., https://pro.experience.com/reviews/name-id), or empty string
+        """
+        print(f"\n{'='*60}")
+        print("STEP 9: Capture Profile URL for Total Expert")
+        print(f"{'='*60}")
+
+        profile_url = ""
+
+        try:
+            # First, close any open drawers/modals by pressing Escape
+            await self.page.keyboard.press('Escape')
+            await asyncio.sleep(1)
+            await self.page.keyboard.press('Escape')
+            await asyncio.sleep(1)
+
+            # Step 1: Navigate to Hierarchy → Users
+            print("\nNavigating to Hierarchy -> Users...")
+            hierarchy_el = await self.page.query_selector('text="Hierarchy"')
+            if hierarchy_el and await hierarchy_el.is_visible():
+                await hierarchy_el.click()
+                await asyncio.sleep(1)
+
+            users_el = await self.page.query_selector('button:has-text("Users")')
+            if users_el and await users_el.is_visible():
+                await users_el.click()
+                await asyncio.sleep(2)
+
+            # Step 2: Search for user
+            print(f"\nSearching for user: {user_name}...")
+
+            # First check if Filter sidebar is visible, if not click to show it
+            search_box = await self.page.query_selector('input[placeholder="Search"]')
+            if not search_box or not await search_box.is_visible():
+                # Click "Show filter" to expand sidebar
+                filter_btn = await self.page.query_selector('text="Show filter"')
+                if filter_btn and await filter_btn.is_visible():
+                    await filter_btn.click()
+                    await asyncio.sleep(1)
+                    search_box = await self.page.query_selector('input[placeholder="Search"]')
+
+            if search_box and await search_box.is_visible():
+                await search_box.fill('')
+                await search_box.fill(user_name)
+                await asyncio.sleep(2)
+            else:
+                print("  WARNING: Search box not visible")
+
+            # Step 3: Click directly on the user's name in the list to view their profile
+            # This is simpler than navigating through the three dots menu
+            print("\nClicking on user name to view profile...")
+
+            # Find and click the user's name link in the table
+            name_clicked = False
+            name_selectors = [
+                f'a:has-text("{user_name}")',
+                f'td:has-text("{user_name}") a',
+                f'text="{user_name}"',
+                f'div:text-is("{user_name}")',
+            ]
+
+            for selector in name_selectors:
+                try:
+                    name_elements = await self.page.query_selector_all(selector)
+                    for name_el in name_elements:
+                        if name_el and await name_el.is_visible():
+                            await name_el.click()
+                            name_clicked = True
+                            print(f"  Clicked on user name: {user_name}")
+                            await asyncio.sleep(3)
+                            break
+                    if name_clicked:
+                        break
+                except:
+                    continue
+
+            if not name_clicked:
+                print("  WARNING: Could not click on user name")
+
+            await self.page.screenshot(path='experience_31_profile_clicked.png')
+            print("Screenshot: experience_31_profile_clicked.png")
+
+            # Wait for profile page to fully load
+            await asyncio.sleep(3)
+
+            await self.page.screenshot(path='experience_32_profile_preview.png')
+            print("Screenshot: experience_32_profile_preview.png")
+
+            # Step 4: Extract the "Visit user profile" URL
+            # The URL is displayed on the profile preview page near "Visit your profile"
+            # HTML structure: <a id="profile-link" href="https://www.experience.com/reviews/...">
+            print("\nExtracting profile URL...")
+
+            # Method 1: Direct selector for the profile link element
+            try:
+                profile_link = await self.page.query_selector('#profile-link')
+                if profile_link:
+                    profile_url = await profile_link.get_attribute('href')
+                    if profile_url and 'experience.com/reviews' in profile_url:
+                        print(f"  Found profile URL from #profile-link: {profile_url}")
+            except Exception as e:
+                print(f"  Method 1 error: {e}")
+
+            # Method 2: Data attribute selector
+            if not profile_url:
+                try:
+                    profile_link = await self.page.query_selector('[data-test-profile-link="true"]')
+                    if profile_link:
+                        profile_url = await profile_link.get_attribute('href')
+                        if profile_url and 'experience.com/reviews' in profile_url:
+                            print(f"  Found profile URL from data-test-profile-link: {profile_url}")
+                except Exception as e:
+                    print(f"  Method 2 error: {e}")
+
+            # Method 3: Find any link with experience.com/reviews in href
+            if not profile_url:
+                try:
+                    all_links = await self.page.query_selector_all('a[href*="experience.com/reviews"]')
+                    for link in all_links:
+                        href = await link.get_attribute('href')
+                        if href and 'experience.com/reviews' in href:
+                            profile_url = href
+                            print(f"  Found profile URL from page links: {profile_url}")
+                            break
+                except Exception as e:
+                    print(f"  Method 3 error: {e}")
+
+            # Method 4: Search page HTML content for the URL pattern
+            if not profile_url:
+                try:
+                    page_content = await self.page.content()
+                    import re
+                    # Match the profile URL pattern - www.experience.com or experience.com
+                    patterns = [
+                        r'https://www\.experience\.com/reviews/[a-zA-Z0-9\-_]+',
+                        r'https://experience\.com/reviews/[a-zA-Z0-9\-_]+',
+                        r'href="(https://[^"]*experience\.com/reviews/[^"]+)"',
+                    ]
+                    for pattern in patterns:
+                        match = re.search(pattern, page_content)
+                        if match:
+                            profile_url = match.group(1) if match.lastindex else match.group(0)
+                            print(f"  Found profile URL from page content: {profile_url}")
+                            break
+                except Exception as e:
+                    print(f"  Method 4 error: {e}")
+
+            # Method 5: Evaluate JavaScript to find the URL in the DOM
+            if not profile_url:
+                try:
+                    profile_url = await self.page.evaluate('''() => {
+                        // First try the specific element
+                        const profileLink = document.querySelector('#profile-link');
+                        if (profileLink && profileLink.href) return profileLink.href;
+
+                        // Also try data attribute
+                        const dataLink = document.querySelector('[data-test-profile-link="true"]');
+                        if (dataLink && dataLink.href) return dataLink.href;
+
+                        // Search all links for experience.com/reviews
+                        const links = document.querySelectorAll('a[href*="experience.com/reviews"]');
+                        if (links.length > 0) return links[0].href;
+
+                        return null;
+                    }''')
+                    if profile_url:
+                        print(f"  Found profile URL via JavaScript: {profile_url}")
+                except Exception as e:
+                    print(f"  Method 5 error: {e}")
+
+            if not profile_url:
+                print("  WARNING: Could not extract profile URL")
+
+        except Exception as e:
+            print(f"  ERROR getting profile URL: {e}")
+
+        return profile_url
+
+    async def fill_profile_info(self, user_data: dict):
+        """Fill the Profile Info fields with user data from Azure
+
+        Per Experience User Guide Pages 10-14:
+        - Business Information > Title: User's job title
+        - Contact Information > Phone Number: Office phone
+        - Contact Information > Mobile Number: Cell phone
+        - Contact Information > Website URL: HRM user website link
+        - Licenses > License Name: NMLS number (format: "NMLS# 123456")
+        - Images > Profile Photo: Headshot (if available)
+
+        Args:
+            user_data: Dictionary with user information from Azure, expected keys:
+                - title: str (job title)
+                - phone: str (office phone)
+                - mobile: str (cell phone)
+                - website_url: str (HRM website link)
+                - nmls: str (NMLS number, just the digits)
+                - headshot_path: str (optional, path to headshot image)
+        """
+        print(f"\n{'='*60}")
+        print("STEP 10: Fill Profile Info Fields (From Azure)")
+        print(f"{'='*60}")
+
+        try:
+            # First, close any open drawers/modals by pressing Escape
+            await self.page.keyboard.press('Escape')
+            await asyncio.sleep(1)
+            await self.page.keyboard.press('Escape')
+            await asyncio.sleep(1)
+
+            # Navigate to Hierarchy → Users
+            print("\nNavigating to Hierarchy -> Users...")
+            hierarchy_el = await self.page.query_selector('text="Hierarchy"')
+            if hierarchy_el and await hierarchy_el.is_visible():
+                await hierarchy_el.click()
+                await asyncio.sleep(1)
+
+            users_el = await self.page.query_selector('button:has-text("Users")')
+            if users_el and await users_el.is_visible():
+                await users_el.click()
+                await asyncio.sleep(2)
+
+            # Search for user by name (from user_data or use first/last name)
+            user_name = user_data.get('name', f"{user_data.get('first_name', '')} {user_data.get('last_name', '')}").strip()
+            print(f"\nSearching for user: {user_name}...")
+
+            # First check if Filter sidebar is visible, if not click to show it
+            search_box = await self.page.query_selector('input[placeholder="Search"]')
+            if not search_box or not await search_box.is_visible():
+                # Click "Show filter" or "Filter Users" to open sidebar
+                filter_btn = await self.page.query_selector('text="Show filter"')
+                if not filter_btn:
+                    filter_btn = await self.page.query_selector('text="Filter Users"')
+                if not filter_btn:
+                    filter_btn = await self.page.query_selector('[class*="filter-toggle"]')
+                if filter_btn and await filter_btn.is_visible():
+                    await filter_btn.click()
+                    await asyncio.sleep(1)
+                    search_box = await self.page.query_selector('input[placeholder="Search"]')
+
+            if search_box and await search_box.is_visible():
+                await search_box.fill('')
+                await search_box.fill(user_name)
+                await asyncio.sleep(2)
+            else:
+                print("  WARNING: Search box not found - may need to refresh page")
+
+            # Click three dots menu and select Edit
+            print("\nOpening Edit menu...")
+            menu_selectors = [
+                '[class*="action"] button',
+                'button[class*="more"]',
+                '[class*="ant-dropdown-trigger"]',
+            ]
+
+            for selector in menu_selectors:
+                try:
+                    elements = await self.page.query_selector_all(selector)
+                    for menu_btn in elements:
+                        if menu_btn and await menu_btn.is_visible():
+                            await menu_btn.click()
+                            await asyncio.sleep(1)
+                            break
+                    break
+                except:
+                    continue
+
+            # Click Edit
+            edit_btn = await self.page.query_selector('text="Edit"')
+            if edit_btn and await edit_btn.is_visible():
+                await edit_btn.click()
+                await asyncio.sleep(2)
+
+            await self.page.screenshot(path='experience_33_edit_profile_info.png')
+            print("Screenshot: experience_33_edit_profile_info.png")
+
+            # Make sure we're on Profile Info tab (NOT Profile Settings)
+            print("\nClicking Profile Info tab...")
+            profile_info_tab = await self.page.query_selector('text="Profile Info"')
+            if profile_info_tab and await profile_info_tab.is_visible():
+                await profile_info_tab.click()
+                await asyncio.sleep(1)
+
+            # ============================================================
+            # BUSINESS INFORMATION - Title
+            # ============================================================
+            if user_data.get('title'):
+                print(f"\nSetting Title to: {user_data['title']}")
+
+                # Expand Business Information section if needed
+                biz_info = await self.page.query_selector('text="Business Information"')
+                if biz_info:
+                    await biz_info.scroll_into_view_if_needed()
+                    await asyncio.sleep(0.3)
+
+                # Find Title field
+                title_selectors = [
+                    'label:has-text("Title") >> following::input[1]',
+                    '//*[contains(text(), "Title")]/following::input[1]',
+                    'input[placeholder*="title" i]',
+                ]
+
+                for selector in title_selectors:
+                    try:
+                        title_input = await self.page.query_selector(selector)
+                        if title_input and await title_input.is_visible():
+                            await title_input.click()
+                            await title_input.fill('')
+                            await title_input.fill(user_data['title'])
+                            print(f"  Set Title to: {user_data['title']}")
+                            break
+                    except:
+                        continue
+
+            # ============================================================
+            # CONTACT INFORMATION
+            # ============================================================
+            # Expand Contact Information section
+            contact_info = await self.page.query_selector('text="Contact Information"')
+            if contact_info:
+                await contact_info.scroll_into_view_if_needed()
+                await asyncio.sleep(0.3)
+
+            # Phone Number (office)
+            if user_data.get('phone'):
+                print(f"\nSetting Phone Number to: {user_data['phone']}")
+                phone_selectors = [
+                    'label:has-text("Phone Number") >> following::input[1]',
+                    '//*[contains(text(), "Phone Number")]/following::input[1]',
+                    'input[placeholder*="phone" i]',
+                ]
+
+                for selector in phone_selectors:
+                    try:
+                        phone_input = await self.page.query_selector(selector)
+                        if phone_input and await phone_input.is_visible():
+                            await phone_input.click()
+                            await phone_input.fill('')
+                            await phone_input.fill(user_data['phone'])
+                            print(f"  Set Phone Number to: {user_data['phone']}")
+                            break
+                    except:
+                        continue
+
+            # Mobile Number (cell)
+            if user_data.get('mobile'):
+                print(f"\nSetting Mobile Number to: {user_data['mobile']}")
+                mobile_selectors = [
+                    'label:has-text("Mobile Number") >> following::input[1]',
+                    '//*[contains(text(), "Mobile")]/following::input[1]',
+                    'input[placeholder*="mobile" i]',
+                ]
+
+                for selector in mobile_selectors:
+                    try:
+                        mobile_input = await self.page.query_selector(selector)
+                        if mobile_input and await mobile_input.is_visible():
+                            await mobile_input.click()
+                            await mobile_input.fill('')
+                            await mobile_input.fill(user_data['mobile'])
+                            print(f"  Set Mobile Number to: {user_data['mobile']}")
+                            break
+                    except:
+                        continue
+
+            # Website URL
+            if user_data.get('website_url'):
+                print(f"\nSetting Website URL to: {user_data['website_url']}")
+                url_selectors = [
+                    'label:has-text("Website URL") >> following::input[1]',
+                    '//*[contains(text(), "Website URL")]/following::input[1]',
+                    'input[placeholder*="website" i]',
+                    'input[type="url"]',
+                ]
+
+                for selector in url_selectors:
+                    try:
+                        url_input = await self.page.query_selector(selector)
+                        if url_input and await url_input.is_visible():
+                            await url_input.click()
+                            await url_input.fill('')
+                            await url_input.fill(user_data['website_url'])
+                            print(f"  Set Website URL to: {user_data['website_url']}")
+                            break
+                    except:
+                        continue
+
+            await self.page.screenshot(path='experience_34_contact_info_filled.png')
+            print("Screenshot: experience_34_contact_info_filled.png")
+
+            # ============================================================
+            # LICENSES - NMLS Number
+            # ============================================================
+            if user_data.get('nmls'):
+                print(f"\nSetting NMLS Number to: NMLS# {user_data['nmls']}")
+
+                # Scroll to Licenses section
+                licenses_section = await self.page.query_selector('text="Licenses"')
+                if licenses_section:
+                    await licenses_section.scroll_into_view_if_needed()
+                    await asyncio.sleep(0.3)
+
+                nmls_value = f"NMLS# {user_data['nmls']}"
+
+                # Find License Name input
+                license_selectors = [
+                    'label:has-text("License Name") >> following::input[1]',
+                    '//*[contains(text(), "License Name")]/following::input[1]',
+                    '//*[contains(text(), "Licenses")]/following::input[1]',
+                ]
+
+                for selector in license_selectors:
+                    try:
+                        license_input = await self.page.query_selector(selector)
+                        if license_input and await license_input.is_visible():
+                            await license_input.click()
+                            await license_input.fill('')
+                            await license_input.fill(nmls_value)
+                            print(f"  Set License Name to: {nmls_value}")
+
+                            # Click the + button to add the license
+                            add_btn = await self.page.query_selector('//*[contains(text(), "Licenses")]/following::button[contains(@class, "add") or contains(text(), "+")][1]')
+                            if add_btn:
+                                await add_btn.click()
+                                print("  Clicked Add button for license")
+                            break
+                    except:
+                        continue
+
+            await self.page.screenshot(path='experience_35_licenses_filled.png')
+            print("Screenshot: experience_35_licenses_filled.png")
+
+            # ============================================================
+            # IMAGES - Profile Photo (Headshot)
+            # ============================================================
+            if user_data.get('headshot_path'):
+                print(f"\nUploading headshot from: {user_data['headshot_path']}")
+
+                # Scroll to Images section
+                images_section = await self.page.query_selector('text="Images"')
+                if images_section:
+                    await images_section.scroll_into_view_if_needed()
+                    await asyncio.sleep(0.3)
+
+                # Find upload button/area
+                upload_selectors = [
+                    'text="Upload"',
+                    'input[type="file"]',
+                    '[class*="upload"]',
+                    'button:has-text("Select Images")',
+                ]
+
+                for selector in upload_selectors:
+                    try:
+                        upload_el = await self.page.query_selector(selector)
+                        if upload_el:
+                            if selector == 'input[type="file"]':
+                                # Direct file input
+                                await upload_el.set_input_files(user_data['headshot_path'])
+                                print(f"  Uploaded headshot via file input")
+                            else:
+                                await upload_el.click()
+                                await asyncio.sleep(1)
+                                # Handle file dialog
+                                file_input = await self.page.query_selector('input[type="file"]')
+                                if file_input:
+                                    await file_input.set_input_files(user_data['headshot_path'])
+                                    print(f"  Uploaded headshot")
+                            await asyncio.sleep(2)
+                            break
+                    except Exception as e:
+                        print(f"  Note: Upload attempt with {selector}: {e}")
+                        continue
+
+            await self.page.screenshot(path='experience_36_images_uploaded.png')
+            print("Screenshot: experience_36_images_uploaded.png")
+
+            # ============================================================
+            # SAVE CHANGES
+            # ============================================================
+            print("\nSaving Profile Info changes...")
+            save_btn = await self.page.query_selector('button:has-text("Save")')
+            if save_btn and await save_btn.is_visible():
+                await save_btn.click()
+                print("  Clicked Save button")
+                await asyncio.sleep(2)
+
+                # Handle confirmation if present
+                confirm_btn = await self.page.query_selector('button:has-text("Confirm")')
+                if confirm_btn and await confirm_btn.is_visible():
+                    await confirm_btn.click()
+                    print("  Clicked Confirm button")
+                    await asyncio.sleep(2)
+
+            await self.page.screenshot(path='experience_37_profile_info_saved.png')
+            print("Screenshot: experience_37_profile_info_saved.png")
+
+            print("\n" + "="*50)
+            print("PROFILE INFO FIELDS COMPLETE")
+            print("="*50)
+
+        except Exception as e:
+            print(f"  ERROR filling profile info: {e}")
+            import traceback
+            traceback.print_exc()
+
+    async def save_captured_data(self, user_name: str, widget_code: str, profile_url: str):
+        """Save captured widget code and profile URL to text files
+
+        Creates files in user's Downloads folder:
+        - experience_widget_code_{user_name}.txt
+        - experience_profile_url_{user_name}.txt
+
+        Args:
+            user_name: The user's name (will be sanitized for filename)
+            widget_code: The widget embed code
+            profile_url: The profile URL
+        """
+        import os
+        import re
+
+        # Sanitize user name for filename
+        safe_name = re.sub(r'[^\w\-]', '_', user_name).lower()
+
+        # Get Downloads folder path
+        downloads_folder = os.path.join(os.path.expanduser('~'), 'Downloads')
+
+        print(f"\n{'='*60}")
+        print("Saving Captured Data to Downloads Folder")
+        print(f"{'='*60}")
+
+        # Save Widget Code
+        if widget_code:
+            widget_file = os.path.join(downloads_folder, f'experience_widget_code_{safe_name}.txt')
+            try:
+                with open(widget_file, 'w', encoding='utf-8') as f:
+                    f.write(f"# Experience.com Widget Code for {user_name}\n")
+                    f.write(f"# Generated: {__import__('datetime').datetime.now().isoformat()}\n\n")
+                    f.write(widget_code)
+                print(f"  Widget Code saved to: {widget_file}")
+            except Exception as e:
+                print(f"  ERROR saving widget code: {e}")
+        else:
+            print("  No widget code to save")
+
+        # Save Profile URL
+        if profile_url:
+            url_file = os.path.join(downloads_folder, f'experience_profile_url_{safe_name}.txt')
+            try:
+                with open(url_file, 'w', encoding='utf-8') as f:
+                    f.write(f"# Experience.com Profile URL for {user_name}\n")
+                    f.write(f"# Generated: {__import__('datetime').datetime.now().isoformat()}\n")
+                    f.write(f"# Use this in Total Expert: CUSTOM FIELD 3 (Application URL)\n\n")
+                    f.write(profile_url)
+                print(f"  Profile URL saved to: {url_file}")
+            except Exception as e:
+                print(f"  ERROR saving profile URL: {e}")
+        else:
+            print("  No profile URL to save")
+
 
 async def main():
     """Main test function
@@ -1786,6 +2685,9 @@ async def main():
     print("3. Search for existing test user")
     print("4. Configure Profile Settings")
     print("5. Publish the user profile")
+    print("6. Capture Widget Code for Bigfish")
+    print("7. Capture Profile URL for Total Expert")
+    print("8. Fill Profile Info fields (Title, Contact, NMLS)")
     print("="*60)
 
     # For testing, we need credentials
@@ -1842,9 +2744,35 @@ async def main():
         # Publish the user profile
         await automation.publish_user(TEST_USER_NAME)
 
+        # Capture Widget Code for Bigfish
+        widget_code = await automation.get_widget_code(TEST_USER_NAME)
+
+        # Capture Profile URL for Total Expert
+        profile_url = await automation.get_profile_url(TEST_USER_NAME)
+
+        # Save captured data to files
+        await automation.save_captured_data(TEST_USER_NAME, widget_code, profile_url)
+
+        # Fill Profile Info fields with test data (from Azure in production)
+        # For testing, use sample data
+        test_user_data = {
+            'name': TEST_USER_NAME,
+            'title': 'Loan Officer',
+            'phone': '(469) 402-1200',
+            'mobile': '(555) 123-4567',
+            'website_url': 'https://highlandsmortgage.com/',
+            'nmls': '123456',
+            # 'headshot_path': None,  # Optional - provide path to image file if available
+        }
+        await automation.fill_profile_info(test_user_data)
+
         print("\n" + "="*60)
         print("TEST COMPLETE")
         print("="*60)
+        print("\n--- CAPTURED DATA ---")
+        print(f"Widget Code: {'Saved to Downloads' if widget_code else 'Not captured'}")
+        print(f"Profile URL: {profile_url if profile_url else 'Not captured'}")
+
         print("\nReview the screenshots to see what happened:")
         print("  - experience_14_users_list.png")
         print("  - experience_15_user_search.png")
@@ -1852,13 +2780,26 @@ async def main():
         print("  - experience_17_edit_user.png")
         print("  - experience_18_profile_settings.png")
         print("  - experience_19_drawer_top.png")
-        print("  - experience_19a_review_section.png")
-        print("  - experience_20_settings_configured.png")
-        print("  - experience_21_confirm_popup.png")
-        print("  - experience_22_after_confirm.png")
+        print("  - experience_19a_review_mgmt_configured.png")
+        print("  - experience_19b_social_share_configured.png")
+        print("  - experience_20_expire_survey_configured.png")
+        print("  - experience_21_send_settings_configured.png")
+        print("  - experience_22_before_update.png")
         print("  - experience_23_publish_search.png")
         print("  - experience_24_publish_toggle.png")
         print("  - experience_25_published.png")
+        print("  - experience_26_widgets_menu.png")
+        print("  - experience_27_review_widget_page.png")
+        print("  - experience_28_filter_by_user.png")
+        print("  - experience_29_user_selected.png")
+        print("  - experience_30_get_code_modal.png")
+        print("  - experience_31_view_profile_menu.png")
+        print("  - experience_32_profile_preview.png")
+        print("  - experience_33_edit_profile_info.png")
+        print("  - experience_34_contact_info_filled.png")
+        print("  - experience_35_licenses_filled.png")
+        print("  - experience_36_images_uploaded.png")
+        print("  - experience_37_profile_info_saved.png")
 
         # Keep browser open for inspection
         print("\nBrowser will stay open for 30 seconds for inspection...")
