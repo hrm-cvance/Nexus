@@ -310,6 +310,8 @@ class AutomationStatusTab:
                     await self._run_theworknumber_automation(vendor)
                 elif vendor.name == "MMI":
                     await self._run_mmi_automation(vendor)
+                elif vendor.name == "Experience":
+                    await self._run_experience_automation(vendor)
                 else:
                     # Unknown vendor
                     self._add_vendor_message(vendor.name, f"✗ Unknown vendor: {vendor.name}")
@@ -869,6 +871,77 @@ class AutomationStatusTab:
 
         except Exception as e:
             logger.error(f"MMI automation error: {e}")
+            vendor_result.errors.append(str(e))
+            self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
+            self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        finally:
+            vendor_result.end_time = datetime.now()
+            self.automation_summary.vendor_results.append(vendor_result)
+
+    async def _run_experience_automation(self, vendor: VendorConfig):
+        """Run Experience.com automation"""
+        vendor_result = VendorResult(
+            vendor_name=vendor.name,
+            display_name=vendor.display_name,
+            success=False,
+            start_time=datetime.now()
+        )
+
+        try:
+            from automation.vendors.experience import provision_user
+
+            # Get config path
+            vendor_mappings = self.config_manager.get_enabled_vendors()
+            experience_mapping = next(
+                (m for m in vendor_mappings if m['vendor_name'] == 'Experience'),
+                None
+            )
+
+            if not experience_mapping:
+                raise Exception("Experience vendor mapping not found")
+
+            # Build config path
+            config_dir = self.config_manager.project_root
+            config_path = config_dir / experience_mapping['vendor_config']
+
+            logger.info(f"Using config: {config_path}")
+
+            # Add status message
+            self._add_vendor_message(vendor.name, "Starting Experience.com automation...")
+
+            # Run automation
+            result = await provision_user(self.current_user, str(config_path))
+
+            # Display results
+            for msg in result.get('messages', []):
+                self._add_vendor_message(vendor.name, msg)
+
+            for warning in result.get('warnings', []):
+                self._add_vendor_message(vendor.name, warning, color="orange")
+
+            # Capture widget code and profile URL if available
+            if result.get('widget_code'):
+                self._add_vendor_message(vendor.name, f"Widget Code captured ({len(result['widget_code'])} chars)")
+            if result.get('profile_url'):
+                self._add_vendor_message(vendor.name, f"Profile URL: {result['profile_url']}")
+
+            # Capture errors for summary
+            vendor_result.errors = result.get('errors', [])
+
+            # Add errors to UI
+            for error in vendor_result.errors:
+                self._add_vendor_message(vendor.name, f"✗ {error}", color="red")
+
+            # Update result and status
+            vendor_result.success = result['success']
+            if result['success']:
+                self._update_vendor_status(vendor.name, "success", "✓ Complete")
+            else:
+                self._update_vendor_status(vendor.name, "error", "✗ Failed")
+
+        except Exception as e:
+            logger.error(f"Experience automation error: {e}")
             vendor_result.errors.append(str(e))
             self._add_vendor_message(vendor.name, f"✗ Error: {str(e)}", color="red")
             self._update_vendor_status(vendor.name, "error", "✗ Failed")

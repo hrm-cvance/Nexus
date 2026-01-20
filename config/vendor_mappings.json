@@ -79,11 +79,21 @@
       "vendor_config": "Vendors/MMI/config.json",
       "automation_module": "automation.vendors.mmi",
       "enabled": true
+    },
+    {
+      "entra_group_name": "Experience_Users",
+      "entra_group_id": "",
+      "vendor_name": "Experience",
+      "vendor_display_name": "Experience.com",
+      "vendor_logo": "vendors/Experience/logo.png",
+      "vendor_config": "vendors/Experience/config.json",
+      "automation_module": "automation.vendors.experience",
+      "enabled": true
     }
   ],
   "metadata": {
-    "version": "1.3",
-    "last_updated": "2025-10-22",
+    "version": "1.4",
+    "last_updated": "2025-12-18",
     "notes": "Group-to-Vendor mappings for automatic vendor detection"
   }
 }
