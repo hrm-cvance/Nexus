@@ -40,6 +40,11 @@ class EntraUser:
     photo_url: Optional[str] = None
     photo_data: Optional[bytes] = None
 
+    # Extension attributes from Entra ID
+    nmls_number: Optional[str] = None          # extensionAttribute2
+    headshot_url: Optional[str] = None         # extensionAttribute3
+    website_url: Optional[str] = None          # mySite or extensionAttribute
+
     # Group memberships
     groups: List[EntraGroup] = field(default_factory=list)
 
@@ -58,6 +63,14 @@ class EntraUser:
         Returns:
             EntraUser instance
         """
+        # Extract extension attributes from onPremisesExtensionAttributes
+        ext_attrs = graph_data.get('onPremisesExtensionAttributes', {}) or {}
+        nmls_number = ext_attrs.get('extensionAttribute2')
+        headshot_url = ext_attrs.get('extensionAttribute3')
+
+        # Website URL can be in mySite or an extension attribute
+        website_url = graph_data.get('mySite') or ext_attrs.get('extensionAttribute4')
+
         return cls(
             id=graph_data.get('id', ''),
             display_name=graph_data.get('displayName', ''),
@@ -70,7 +83,10 @@ class EntraUser:
             office_location=graph_data.get('officeLocation'),
             employee_id=graph_data.get('employeeId'),
             mobile_phone=graph_data.get('mobilePhone'),
-            business_phones=graph_data.get('businessPhones', [])
+            business_phones=graph_data.get('businessPhones', []),
+            nmls_number=nmls_number,
+            headshot_url=headshot_url,
+            website_url=website_url
         )
 
     @property

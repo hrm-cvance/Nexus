@@ -40,7 +40,13 @@
       "Bash(1)",
       "Bash(find:*)",
       "Bash(claude mcp add playwright npx @playwright/mcp@latest)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(del *.png)",
+      "Bash(del theworknumber_*.png)",
+      "Bash(del test_*.png)",
+      "Bash(wc:*)",
+      "Bash(python test_experience.py:*)",
+      "Bash(del /q c:ScriptsNexusexperience_*.png)"
     ],
     "deny": [],
     "ask": []

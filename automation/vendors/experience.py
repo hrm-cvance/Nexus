@@ -95,6 +95,9 @@ class ExperienceAutomation:
             'title': user.job_title or '',
             'phone': user.business_phones[0] if user.business_phones else '',
             'mobile': user.mobile_phone or '',
+            'nmls_number': user.nmls_number or '',
+            'headshot_url': user.headshot_url or '',
+            'website_url': user.website_url or '',
         }
 
     def _determine_role(self, job_title: str) -> str:
@@ -181,8 +184,11 @@ class ExperienceAutomation:
             result['messages'].append("Navigated to Users")
 
             # Add new user
-            await self._add_new_user(user_data)
-            result['messages'].append("Created new user")
+            user_created = await self._add_new_user(user_data)
+            if user_created:
+                result['messages'].append("Created new user")
+            else:
+                result['messages'].append("User already exists - updating profile")
 
             # Configure Profile Settings
             await self._configure_profile_settings(user_data)
@@ -415,8 +421,12 @@ class ExperienceAutomation:
         await asyncio.sleep(2)
         await self._screenshot('users_page')
 
-    async def _add_new_user(self, user_data: Dict[str, Any]):
-        """Add a new user to Experience.com"""
+    async def _add_new_user(self, user_data: Dict[str, Any]) -> bool:
+        """Add a new user to Experience.com
+
+        Returns:
+            True if user was created, False if user already exists
+        """
         logger.info(f"Adding new user: {user_data['firstName']} {user_data['lastName']}")
 
         await self._screenshot('before_add_user')
@@ -521,6 +531,20 @@ class ExperienceAutomation:
 
         if not email_filled:
             logger.warning("Could not find Email field")
+
+        # Check for "Email Already Registered" error after filling email
+        await asyncio.sleep(1)  # Wait for validation
+        email_error = await self.page.query_selector('.ant-form-item-explain-error')
+        if email_error and await email_error.is_visible():
+            error_text = await email_error.text_content()
+            if error_text and "Already Registered" in error_text:
+                logger.warning(f"Email already registered: {user_data['email']}")
+                # Close the modal and return - user already exists
+                close_btn = await self.page.query_selector('button.ant-modal-close')
+                if close_btn and await close_btn.is_visible():
+                    await close_btn.click()
+                    await asyncio.sleep(1)
+                return False  # Indicate user already exists
 
         # Fill Employee ID
         if user_data['employeeId']:
@@ -653,6 +677,7 @@ class ExperienceAutomation:
         await self._wait_for_loading()
 
         await self._screenshot('user_created')
+        return True  # User was created successfully
 
     async def _select_experience_dropdown(self, label: str, value: str):
         """Select a value from Experience.com's Ant Design dropdown
@@ -806,6 +831,10 @@ class ExperienceAutomation:
         """
         user_name = f"{user_data['firstName']} {user_data['lastName']}"
         logger.info(f"Configuring profile settings for {user_name}")
+
+        # Navigate to Users page first (in case we're still on user creation modal)
+        await self._navigate_to_users()
+        await asyncio.sleep(2)
 
         await self._search_user(user_data)
 
@@ -1151,11 +1180,12 @@ class ExperienceAutomation:
     async def _get_profile_url(self, user_data: Dict[str, Any]) -> str:
         """Capture the user's public profile URL
 
-        Per Experience User Guide:
+        Per Experience User Guide (Page 9-10):
         1. Navigate to Hierarchy → Users
         2. Search for user
-        3. Click on user's name to view profile
-        4. Extract the profile URL from #profile-link or page content
+        3. Click hamburger menu (three dots) in Actions column
+        4. Select "View Profile"
+        5. Copy URL from "Visit user profile" field (format: https://pro.experience.com/reviews/...)
         """
         user_name = f"{user_data['firstName']} {user_data['lastName']}"
         logger.info(f"Capturing profile URL for {user_name}")
@@ -1173,66 +1203,98 @@ class ExperienceAutomation:
 
             await self._screenshot('profile_url_search')
 
-            # Click on user name to view their profile
-            name_clicked = False
-            name_selectors = [
-                f'a:has-text("{user_name}")',
-                f'td:has-text("{user_name}") a',
-                f'text="{user_name}"',
+            # Click on hamburger/three-dots menu in Actions column
+            menu_clicked = False
+            menu_selectors = [
+                'button:has(svg path[d*="M12"])',  # Three dots icon
+                '[class*="actions"] button:last-child',  # Actions column button
+                'td:last-child button',  # Last column button
+                'button[aria-label*="menu" i]',
+                'button[aria-label*="action" i]',
             ]
 
-            for selector in name_selectors:
+            for selector in menu_selectors:
                 try:
-                    name_elements = await self.page.query_selector_all(selector)
-                    for name_el in name_elements:
-                        if name_el and await name_el.is_visible():
-                            await name_el.click()
-                            name_clicked = True
-                            logger.info(f"Clicked on user name: {user_name}")
-                            await asyncio.sleep(3)
+                    menu_btns = await self.page.query_selector_all(selector)
+                    for menu_btn in menu_btns:
+                        if menu_btn and await menu_btn.is_visible():
+                            await menu_btn.click()
+                            menu_clicked = True
+                            logger.info(f"Clicked three-dots menu: {selector}")
+                            await asyncio.sleep(1)
                             break
-                    if name_clicked:
+                    if menu_clicked:
                         break
                 except:
                     continue
 
-            if not name_clicked:
-                logger.warning("Could not click on user name")
+            if not menu_clicked:
+                logger.warning("Could not click three-dots menu")
 
-            await self._screenshot('profile_preview')
+            await self._screenshot('profile_menu_open')
 
-            # Method 1: Direct selector for the profile link element
-            profile_link = await self.page.query_selector('#profile-link')
-            if profile_link:
-                profile_url = await profile_link.get_attribute('href')
-                if profile_url and 'experience.com/reviews' in profile_url:
-                    logger.info(f"Found profile URL from #profile-link: {profile_url}")
+            # Click "View Profile" option from the dropdown menu
+            view_profile_clicked = False
+            view_profile_selectors = [
+                'text="View Profile"',
+                '[role="menuitem"]:has-text("View Profile")',
+                'li:has-text("View Profile")',
+                'a:has-text("View Profile")',
+            ]
 
-            # Method 2: Data attribute selector
-            if not profile_url:
-                profile_link = await self.page.query_selector('[data-test-profile-link="true"]')
-                if profile_link:
-                    profile_url = await profile_link.get_attribute('href')
-                    if profile_url:
-                        logger.info(f"Found profile URL from data-test-profile-link: {profile_url}")
-
-            # Method 3: Find any link with experience.com/reviews in href
-            if not profile_url:
-                all_links = await self.page.query_selector_all('a[href*="experience.com/reviews"]')
-                for link in all_links:
-                    href = await link.get_attribute('href')
-                    if href and 'experience.com/reviews' in href:
-                        profile_url = href
-                        logger.info(f"Found profile URL from page links: {profile_url}")
+            for selector in view_profile_selectors:
+                try:
+                    view_profile_btn = await self.page.query_selector(selector)
+                    if view_profile_btn and await view_profile_btn.is_visible():
+                        await view_profile_btn.click()
+                        view_profile_clicked = True
+                        logger.info(f"Clicked View Profile: {selector}")
+                        await asyncio.sleep(3)  # Wait for profile page to load
                         break
+                except:
+                    continue
 
-            # Method 4: Search page HTML for URL pattern
+            if not view_profile_clicked:
+                logger.warning("Could not click 'View Profile' option")
+
+            await self._screenshot('profile_view')
+
+            # Extract profile URL from "Visit user profile" link
+            # Per PDF: The link is at the top showing "Visit user profile: https://pro.experience.com/reviews/..."
+            profile_link_selectors = [
+                'a[href*="pro.experience.com/reviews"]',
+                'a[href*="experience.com/reviews"]',
+                '//*[contains(text(), "Visit user profile")]/following::a[1]',
+                '//*[contains(text(), "Visit user profile")]//a',
+                '#profile-link',
+                '[data-test-profile-link="true"]',
+            ]
+
+            for selector in profile_link_selectors:
+                try:
+                    link = await self.page.query_selector(selector)
+                    if link:
+                        href = await link.get_attribute('href')
+                        if href and 'experience.com/reviews' in href:
+                            profile_url = href
+                            logger.info(f"Found profile URL: {profile_url}")
+                            break
+                        # Also try getting text content if it's a displayed URL
+                        text = await link.inner_text()
+                        if text and 'experience.com/reviews' in text:
+                            profile_url = text.strip()
+                            logger.info(f"Found profile URL from text: {profile_url}")
+                            break
+                except:
+                    continue
+
+            # Fallback: Search page content for URL pattern
             if not profile_url:
-                import re
                 page_content = await self.page.content()
                 patterns = [
-                    r'https://www\.experience\.com/reviews/[a-zA-Z0-9\-_]+',
-                    r'https://experience\.com/reviews/[a-zA-Z0-9\-_]+',
+                    r'https://pro\.experience\.com/reviews/[a-zA-Z0-9\-_]+(?:-\d+)?',
+                    r'https://www\.experience\.com/reviews/[a-zA-Z0-9\-_]+(?:-\d+)?',
+                    r'https://experience\.com/reviews/[a-zA-Z0-9\-_]+(?:-\d+)?',
                 ]
                 for pattern in patterns:
                     match = re.search(pattern, page_content)
@@ -1241,15 +1303,15 @@ class ExperienceAutomation:
                         logger.info(f"Found profile URL from page content: {profile_url}")
                         break
 
-            # Method 5: Evaluate JavaScript
+            # Fallback: Evaluate JavaScript to find the URL
             if not profile_url:
                 profile_url = await self.page.evaluate('''() => {
-                    const profileLink = document.querySelector('#profile-link');
-                    if (profileLink && profileLink.href) return profileLink.href;
+                    // Look for "Visit user profile" text and get the URL
+                    const visitText = document.body.innerText;
+                    const match = visitText.match(/https?:\/\/(?:pro\.)?experience\.com\/reviews\/[a-zA-Z0-9\-_]+(?:-\d+)?/);
+                    if (match) return match[0];
 
-                    const dataLink = document.querySelector('[data-test-profile-link="true"]');
-                    if (dataLink && dataLink.href) return dataLink.href;
-
+                    // Look for profile link elements
                     const links = document.querySelectorAll('a[href*="experience.com/reviews"]');
                     if (links.length > 0) return links[0].href;
 
@@ -1267,7 +1329,7 @@ class ExperienceAutomation:
         return profile_url or ""
 
     async def _fill_profile_info(self, user_data: Dict[str, Any]):
-        """Fill Profile Info fields"""
+        """Fill Profile Info fields including Business Info, Contact Info, Licenses, and Headshot"""
         user_name = f"{user_data['firstName']} {user_data['lastName']}"
         logger.info(f"Filling profile info for {user_name}")
 
@@ -1278,8 +1340,11 @@ class ExperienceAutomation:
             await self._navigate_to_users()
             await self._search_user(user_data)
 
-            # Open Edit menu
+            # Open Edit menu via three dots/hamburger menu
             menu_btn = await self.page.query_selector('button:has(svg path[d*="M12"])')
+            if not menu_btn:
+                # Try alternate selector for three dots menu
+                menu_btn = await self.page.query_selector('[class*="actions"] button')
             if menu_btn and await menu_btn.is_visible():
                 await menu_btn.click()
                 await asyncio.sleep(1)
@@ -1295,35 +1360,103 @@ class ExperienceAutomation:
                 await profile_info_tab.click()
                 await asyncio.sleep(1)
 
-            # Fill Title
+            # ============================================================
+            # BUSINESS INFORMATION SECTION
+            # ============================================================
+            business_info = await self.page.query_selector('text="Business Information"')
+            if business_info:
+                await business_info.click()
+                await asyncio.sleep(0.5)
+
+            # Fill Title (replace default with user's title)
             if user_data.get('title'):
                 title_input = await self.page.query_selector('input[placeholder*="Title" i]')
                 if not title_input:
                     title_input = await self.page.query_selector('//*[contains(text(), "Title")]/following::input[1]')
                 if title_input and await title_input.is_visible():
+                    await title_input.fill('')
                     await title_input.fill(user_data['title'])
                     logger.info(f"Filled Title: {user_data['title']}")
 
-            # Fill Phone
+            # ============================================================
+            # CONTACT INFORMATION SECTION
+            # ============================================================
+            contact_info = await self.page.query_selector('text="Contact Information"')
+            if contact_info:
+                await contact_info.click()
+                await asyncio.sleep(0.5)
+
+            # Fill Phone Number
             if user_data.get('phone'):
                 phone_input = await self.page.query_selector('input[placeholder*="Phone" i]')
                 if not phone_input:
-                    phone_input = await self.page.query_selector('//*[contains(text(), "Phone")]/following::input[1]')
+                    phone_input = await self.page.query_selector('//*[contains(text(), "Phone Number")]/following::input[1]')
                 if phone_input and await phone_input.is_visible():
+                    await phone_input.fill('')
                     await phone_input.fill(user_data['phone'])
                     logger.info(f"Filled Phone: {user_data['phone']}")
 
-            # Fill Mobile
+            # Fill Mobile Number
             if user_data.get('mobile'):
                 mobile_input = await self.page.query_selector('input[placeholder*="Mobile" i]')
                 if not mobile_input:
                     mobile_input = await self.page.query_selector('//*[contains(text(), "Mobile")]/following::input[1]')
                 if mobile_input and await mobile_input.is_visible():
+                    await mobile_input.fill('')
                     await mobile_input.fill(user_data['mobile'])
                     logger.info(f"Filled Mobile: {user_data['mobile']}")
 
-            # Click Update
+            # Fill Website URL
+            if user_data.get('website_url'):
+                website_input = await self.page.query_selector('input[placeholder*="Website" i]')
+                if not website_input:
+                    website_input = await self.page.query_selector('//*[contains(text(), "Website URL")]/following::input[1]')
+                if website_input and await website_input.is_visible():
+                    await website_input.fill('')
+                    await website_input.fill(user_data['website_url'])
+                    logger.info(f"Filled Website URL: {user_data['website_url']}")
+
+            # ============================================================
+            # LICENSES SECTION - NMLS Number
+            # ============================================================
+            if user_data.get('nmls_number'):
+                licenses_section = await self.page.query_selector('text="Licenses"')
+                if licenses_section:
+                    await licenses_section.click()
+                    await asyncio.sleep(0.5)
+
+                # Look for License Name input field
+                license_input = await self.page.query_selector('input[placeholder*="License" i]')
+                if not license_input:
+                    license_input = await self.page.query_selector('//*[contains(text(), "License Name")]/following::input[1]')
+                if license_input and await license_input.is_visible():
+                    nmls_value = user_data['nmls_number']
+                    # Format as "NMLS# 123456" if not already formatted
+                    if not nmls_value.upper().startswith('NMLS'):
+                        nmls_value = f"NMLS# {nmls_value}"
+                    await license_input.fill('')
+                    await license_input.fill(nmls_value)
+                    logger.info(f"Filled NMLS License: {nmls_value}")
+
+                    # Click the plus button to add the license
+                    plus_btn = await self.page.query_selector('//*[contains(text(), "License")]/ancestor::div[1]//button[contains(@class, "plus")] | //*[contains(text(), "License")]/following::button[1]')
+                    if plus_btn and await plus_btn.is_visible():
+                        await plus_btn.click()
+                        logger.info("Clicked plus to add license")
+                        await asyncio.sleep(0.5)
+
+            # ============================================================
+            # IMAGES SECTION - Headshot Upload
+            # ============================================================
+            if user_data.get('headshot_url'):
+                await self._upload_headshot(user_data['headshot_url'])
+
+            await self._screenshot('profile_info_filled')
+
+            # Click Update/Save
             update_btn = await self.page.query_selector('button:has-text("Update")')
+            if not update_btn:
+                update_btn = await self.page.query_selector('button:has-text("Save")')
             if update_btn and await update_btn.is_visible():
                 await update_btn.click()
                 await asyncio.sleep(1)
@@ -1337,6 +1470,71 @@ class ExperienceAutomation:
 
         except Exception as e:
             logger.error(f"Error filling profile info: {e}")
+
+    async def _upload_headshot(self, headshot_url: str):
+        """Upload user's headshot photo from URL
+
+        Args:
+            headshot_url: URL to the headshot image (from Entra extensionAttribute3)
+        """
+        logger.info(f"Uploading headshot from: {headshot_url}")
+
+        try:
+            # Expand Images section
+            images_section = await self.page.query_selector('text="Images"')
+            if images_section:
+                await images_section.click()
+                await asyncio.sleep(0.5)
+
+            # Look for Upload button or file input
+            upload_btn = await self.page.query_selector('text="Upload"')
+            if not upload_btn:
+                upload_btn = await self.page.query_selector('[class*="upload"]')
+
+            if upload_btn and await upload_btn.is_visible():
+                # Download the image first to a temp file
+                import tempfile
+                import urllib.request
+                import os
+
+                # Create temp file for the image
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                    temp_path = tmp_file.name
+
+                try:
+                    # Download image from URL
+                    urllib.request.urlretrieve(headshot_url, temp_path)
+                    logger.info(f"Downloaded headshot to: {temp_path}")
+
+                    # Find file input element
+                    file_input = await self.page.query_selector('input[type="file"]')
+                    if file_input:
+                        await file_input.set_input_files(temp_path)
+                        logger.info("Uploaded headshot file")
+                        await asyncio.sleep(2)  # Wait for upload to process
+                    else:
+                        # Click upload button which may trigger file chooser
+                        async with self.page.expect_file_chooser() as fc_info:
+                            await upload_btn.click()
+                        file_chooser = await fc_info.value
+                        await file_chooser.set_files(temp_path)
+                        logger.info("Uploaded headshot via file chooser")
+                        await asyncio.sleep(2)
+
+                except Exception as download_error:
+                    logger.warning(f"Could not download/upload headshot: {download_error}")
+
+                finally:
+                    # Clean up temp file
+                    try:
+                        os.unlink(temp_path)
+                    except:
+                        pass
+            else:
+                logger.warning("Could not find upload button for headshot")
+
+        except Exception as e:
+            logger.warning(f"Error uploading headshot: {e}")
 
     async def _cleanup(self):
         """Clean up browser resources"""

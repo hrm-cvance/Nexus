@@ -129,7 +129,8 @@ class GraphAPIClient:
         """
         logger.info(f"Searching users: {search_type.value} = '{query}'")
 
-        # Select fields to retrieve
+        # Select fields to retrieve (basic fields only - extension attributes fetched in get_user_details)
+        # Note: mySite and onPremisesExtensionAttributes cannot be used with $search queries
         select_fields = "id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,employeeId,mobilePhone,businessPhones"
 
         # Build query parameters
@@ -182,7 +183,8 @@ class GraphAPIClient:
         """
         logger.info(f"Getting details for user: {user_id}")
 
-        select_fields = "id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,employeeId,mobilePhone,businessPhones"
+        # Select fields to retrieve (including extension attributes for NMLS, headshot, website)
+        select_fields = "id,displayName,givenName,surname,mail,userPrincipalName,jobTitle,department,officeLocation,employeeId,mobilePhone,businessPhones,mySite,onPremisesExtensionAttributes"
 
         params = {"$select": select_fields}
 
