@@ -88,7 +88,7 @@
       "vendor_logo": "vendors/Experience/logo.png",
       "vendor_config": "vendors/Experience/config.json",
       "automation_module": "automation.vendors.experience",
-      "enabled": true
+      "enabled": false
     }
   ],
   "metadata": {

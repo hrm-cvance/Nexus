@@ -151,6 +151,10 @@ class ConfigManager:
         """Get only enabled vendor mappings"""
         return [v for v in self.get_vendor_mappings() if v.get('enabled', True)]
 
+    def get_disabled_vendors(self) -> list:
+        """Get only disabled vendor mappings"""
+        return [v for v in self.get_vendor_mappings() if not v.get('enabled', True)]
+
     def save_user_settings(self, settings: Dict[str, Any]):
         """Save user settings to file"""
         settings_path = self.appdata_root / 'config' / 'user_settings.json'

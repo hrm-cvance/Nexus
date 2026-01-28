@@ -316,11 +316,20 @@ class AccountProvisioningTab:
             )
             no_vendors_label.pack(pady=20)
             self.start_btn.configure(state="disabled")
+            # Still show disabled vendor cards below
+            disabled_mappings = self.config_manager.get_disabled_vendors()
+            for mapping in disabled_mappings:
+                self._create_disabled_vendor_card(mapping)
             return
 
         # Create vendor cards
         for vendor in self.detected_vendors:
             self._create_vendor_card(vendor)
+
+        # Show disabled vendor cards (grayed out)
+        disabled_mappings = self.config_manager.get_disabled_vendors()
+        for mapping in disabled_mappings:
+            self._create_disabled_vendor_card(mapping)
 
         # Enable start button if vendors are selected
         self._update_start_button()
@@ -374,6 +383,53 @@ class AccountProvisioningTab:
                 text_color="green"
             )
             badge.pack(side="right", padx=(10, 0))
+
+    def _create_disabled_vendor_card(self, mapping: dict):
+        """Create a grayed-out vendor card for a disabled vendor"""
+        card = ctk.CTkFrame(self.vendors_container, fg_color="#2b2b2b")
+        card.pack(fill="x", pady=5)
+
+        content_frame = ctk.CTkFrame(card, fg_color="transparent")
+        content_frame.pack(fill="x", padx=15, pady=12)
+
+        # Disabled checkbox (unchecked, non-interactive)
+        checkbox = ctk.CTkCheckBox(
+            content_frame,
+            text="",
+            state="disabled"
+        )
+        checkbox.pack(side="left", padx=(0, 10))
+
+        # Vendor info (grayed out)
+        info_frame = ctk.CTkFrame(content_frame, fg_color="transparent")
+        info_frame.pack(side="left", fill="x", expand=True)
+
+        name_label = ctk.CTkLabel(
+            info_frame,
+            text=mapping.get('vendor_display_name', mapping.get('vendor_name', '')),
+            font=ctk.CTkFont(size=14, weight="bold"),
+            text_color="#666666",
+            anchor="w"
+        )
+        name_label.pack(anchor="w")
+
+        group_label = ctk.CTkLabel(
+            info_frame,
+            text=f"Group: {mapping.get('entra_group_name', '')}",
+            font=ctk.CTkFont(size=11),
+            text_color="#555555",
+            anchor="w"
+        )
+        group_label.pack(anchor="w")
+
+        # "DISABLED" badge
+        badge = ctk.CTkLabel(
+            content_frame,
+            text="DISABLED",
+            font=ctk.CTkFont(size=10, weight="bold"),
+            text_color="#666666"
+        )
+        badge.pack(side="right", padx=(10, 0))
 
     def _on_vendor_toggled(self, vendor: VendorConfig, var: ctk.BooleanVar):
         """Handle vendor checkbox toggle"""
