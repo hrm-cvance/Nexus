@@ -608,13 +608,54 @@ class AutomationStatusTab:
             self.automation_summary.vendor_results.append(vendor_result)
 
     async def _run_clearcapital_automation(self, vendor: VendorConfig):
-        """Run ClearCapital automation"""
+        """Run ClearCapital automation with username conflict handling"""
         vendor_result = VendorResult(
             vendor_name=vendor.name,
             display_name=vendor.display_name,
             success=False,
             start_time=datetime.now()
         )
+
+        # Store for dialog result communication between threads
+        dialog_result_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_username_conflict(display_name: str, attempted_username: str) -> Optional[str]:
+            """
+            Callback to prompt user when username is taken.
+            Shows a dialog on the main thread and waits for the response.
+            """
+            logger.info(f"Username conflict detected for {display_name}: {attempted_username}")
+            dialog_result_holder['ready'].clear()
+            dialog_result_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = UsernameConflictDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_username=attempted_username
+                    )
+                    dialog_result_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Dialog error: {e}")
+                    dialog_result_holder['result'] = None
+                finally:
+                    dialog_result_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            dialog_result_holder['ready'].wait(timeout=300)  # 5 minute timeout
+
+            result = dialog_result_holder['result']
+            if result:
+                logger.info(f"User provided alternate username: {result}")
+            else:
+                logger.info("User chose to skip ClearCapital")
+
+            return result
 
         try:
             # Import automation module
@@ -639,8 +680,13 @@ class AutomationStatusTab:
             # Add status message
             self._add_vendor_message(vendor.name, "Starting ClearCapital automation...")
 
-            # Run automation (no API key needed for ClearCapital)
-            result = await provision_user(self.current_user, str(config_path), api_key=None)
+            # Run automation with username conflict callback
+            result = await provision_user(
+                self.current_user,
+                str(config_path),
+                api_key=None,
+                on_username_conflict=handle_username_conflict
+            )
 
             # Display results
             logger.info(f"ClearCapital result: {result}")

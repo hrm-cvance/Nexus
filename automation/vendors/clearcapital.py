@@ -21,7 +21,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable, Awaitable
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
@@ -62,18 +62,27 @@ class ClearCapitalAutomation:
             logger.error(f"Failed to load config: {e}")
             raise
 
-    async def create_account(self, user: EntraUser, headless: bool = False) -> Dict[str, Any]:
+    async def create_account(
+        self,
+        user: EntraUser,
+        headless: bool = False,
+        on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+    ) -> Dict[str, Any]:
         """
         Create a ClearCapital account for the user
 
         Args:
             user: EntraUser object with user details
             headless: Run browser in headless mode (default: False for debugging)
+            on_username_conflict: Async callback when username is taken.
+                Receives (display_name, attempted_username).
+                Should return new username to try, or None to skip this vendor.
 
         Returns:
             Dict with status, success boolean, and any messages/errors
         """
         self.current_user = user
+        self.on_username_conflict = on_username_conflict
         result = {
             'success': False,
             'user': user.display_name,
@@ -111,35 +120,57 @@ class ClearCapitalAutomation:
             # Wait for success confirmation
             success_result = await self._wait_for_success()
 
-            # Handle duplicate username - retry with alternate username
+            # Handle duplicate username - prompt user for decision
             if success_result.get('duplicate_username'):
-                logger.info(f"Username {user_data['username']} already exists, retrying with {user_data['username_if_exists']}")
-                result['warnings'].extend(success_result.get('warnings', []))
+                if on_username_conflict:
+                    # Ask user for alternative username or skip
+                    result['messages'].append(f"ℹ Username '{user_data['username']}' is already taken")
+                    new_username = await on_username_conflict(user.display_name, user_data['username'])
 
-                # Click "Click here to go back" link to return to form
-                try:
-                    back_link = await self.page.query_selector('a[href="javascript:history.back();"]')
-                    if back_link:
-                        await back_link.click()
-                        await self.page.wait_for_load_state('networkidle')
-                        await asyncio.sleep(1)
-                        logger.info("Clicked 'go back' link to return to form")
-                except Exception as e:
-                    logger.warning(f"Could not click back link, navigating manually: {e}")
-                    await self._navigate_to_new_user()
+                    if new_username is None:
+                        # User chose to skip
+                        result['success'] = False
+                        result['warnings'].append(f"⚠ Username '{user_data['username']}' already exists - User chose to skip")
+                        logger.info(f"User skipped ClearCapital due to username conflict: {user.display_name}")
+                        return result
+                    else:
+                        # User provided alternative username - go back and retry
+                        logger.info(f"User provided alternate username: {new_username}")
 
-                # Update username to alternate format
-                user_data['username'] = user_data['username_if_exists']
+                        # Click "Click here to go back" link to return to form
+                        try:
+                            back_link = await self.page.query_selector('a[href="javascript:history.back();"]')
+                            if back_link:
+                                await back_link.click()
+                                await self.page.wait_for_load_state('networkidle')
+                                await asyncio.sleep(1)
+                                logger.info("Clicked 'go back' link to return to form")
+                        except Exception as e:
+                            logger.warning(f"Could not click back link, navigating manually: {e}")
+                            await self._navigate_to_new_user()
 
-                # Fill form again with new username
-                await self._fill_user_form(user_data)
-                result['messages'].append(f"✓ Retrying with alternate username: {user_data['username']}")
+                        # Update username to user-provided value
+                        user_data['username'] = new_username
 
-                # Submit form again
-                await self._submit_form()
+                        # Fill form again with new username
+                        await self._fill_user_form(user_data)
+                        result['messages'].append(f"ℹ Trying alternate username: {new_username}")
 
-                # Wait for success confirmation again
-                success_result = await self._wait_for_success()
+                        # Submit form again
+                        await self._submit_form()
+
+                        # Wait for success confirmation again
+                        success_result = await self._wait_for_success()
+                        if not success_result.get('success', False):
+                            result['errors'].append(f"✗ {success_result.get('errors', ['Form submission failed'])[0] if success_result.get('errors') else 'Form submission failed with alternate username'}")
+                            return result
+                        result['messages'].append(f"✓ Used alternate username: {new_username}")
+                else:
+                    # No callback provided - fail with error
+                    result['success'] = False
+                    result['warnings'].append(f"⚠ Username '{user_data['username']}' already exists - Account was not created")
+                    logger.info(f"Username conflict in ClearCapital, no callback provided: {user.display_name}")
+                    return result
 
             # Merge results
             result['success'] = success_result.get('success', False)
@@ -561,26 +592,23 @@ class ClearCapitalAutomation:
                     result['errors'].append(text)
                     result['success'] = False
 
-            # Only consider it successful if we actually navigated away from the form
-            # The user_detail.cfm page should redirect on success
-            if 'user_detail.cfm?user=-9999' in self.page.url:
-                # Still on the new user form - this means there was an error
+            # Check for the specific success message: "Your Updates Have Been Saved."
+            page_content = await self.page.content()
+            if 'Your Updates Have Been Saved' in page_content:
+                logger.info("Success message found: 'Your Updates Have Been Saved.'")
+                result['messages'].append("✓ User created successfully")
+                result['success'] = True
+            elif 'user_detail.cfm?user=-9999' in self.page.url:
+                # Still on the new user form with no success message - this means there was an error
                 logger.warning("Still on new user form after submit - likely an error occurred")
                 result['success'] = False
                 if not result['errors']:
                     result['errors'].append("Form submission did not complete - still on form page")
             else:
-                # Successfully navigated away from form
+                # Navigated away from form but no explicit success message - assume success
+                logger.info("Navigated away from form, assuming success")
                 result['messages'].append("✓ User created successfully")
                 result['success'] = True
-
-            # Look for success indicators
-            success_elements = await self.page.query_selector_all('.success, .alert-success, [class*="success"]')
-            for elem in success_elements:
-                if await elem.is_visible():
-                    text = await elem.text_content()
-                    logger.info(f"Success message: {text}")
-                    result['messages'].append(f"✓ {text}")
 
         except Exception as e:
             logger.warning(f"Could not verify success: {e}")
@@ -588,7 +616,12 @@ class ClearCapitalAutomation:
         return result
 
 
-async def provision_user(user: EntraUser, config_path: str, api_key: Optional[str] = None) -> Dict[str, Any]:
+async def provision_user(
+    user: EntraUser,
+    config_path: str,
+    api_key: Optional[str] = None,
+    on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+) -> Dict[str, Any]:
     """
     Provision a ClearCapital user account
 
@@ -596,6 +629,9 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
         user: EntraUser object with user details
         config_path: Path to vendor config.json
         api_key: Optional API key (not used for ClearCapital)
+        on_username_conflict: Async callback when username is taken.
+            Receives (display_name, attempted_username).
+            Should return new username to try, or None to skip this vendor.
 
     Returns:
         Dict with status, success boolean, and any messages/errors
@@ -610,7 +646,11 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
     # Create automation instance
     automation = ClearCapitalAutomation(config_path, keyvault)
 
-    # Run automation
-    result = await automation.create_account(user, headless=False)
+    # Run automation with callback
+    result = await automation.create_account(
+        user,
+        headless=False,
+        on_username_conflict=on_username_conflict
+    )
 
     return result
