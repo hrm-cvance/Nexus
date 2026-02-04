@@ -386,7 +386,9 @@ class AutomationStatusTab:
                         color="cyan"
                     )
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -456,7 +458,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -526,7 +530,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -596,7 +602,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -660,7 +668,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -725,7 +735,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -790,7 +802,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -855,7 +869,9 @@ class AutomationStatusTab:
             for warning in result.get('warnings', []):
                 self._add_vendor_message(vendor.name, warning, color="orange")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI
@@ -926,7 +942,9 @@ class AutomationStatusTab:
             if result.get('profile_url'):
                 self._add_vendor_message(vendor.name, f"Profile URL: {result['profile_url']}")
 
-            # Capture errors for summary
+            # Capture results for summary
+            vendor_result.messages = result.get('messages', [])
+            vendor_result.warnings = result.get('warnings', [])
             vendor_result.errors = result.get('errors', [])
 
             # Add errors to UI

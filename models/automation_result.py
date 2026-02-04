@@ -19,6 +19,8 @@ class VendorResult:
     success: bool
     start_time: datetime
     end_time: Optional[datetime] = None
+    messages: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     screenshot_path: Optional[str] = None
 

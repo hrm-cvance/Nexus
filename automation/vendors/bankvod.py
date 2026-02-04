@@ -7,9 +7,10 @@ Uses Azure Key Vault for secure credential retrieval.
 Process:
 1. Login to BankVOD
 2. Navigate to Authorized Users
-3. Add new authorized user with auto-generated password
-4. Search for the newly created user
-5. Update user to change password to HRM default
+3. Add new authorized user (auto-generated password)
+4. Detect duplicate user (skip with warning if exists)
+5. Search for the newly created user (validates account was created)
+6. Update user password to HRM default
 """
 
 import json
@@ -137,9 +138,7 @@ class BankVODAutomation:
             result['messages'].append(f"✓ Successfully created BankVOD account for {user.display_name}")
             logger.info(f"Successfully completed BankVOD account creation for {user.display_name}")
 
-            # TODO: Step 2 - Update password to HRM default (currently disabled for testing)
-            # Uncomment below to enable password update step:
-            """
+            # Step 2 - Update password to HRM default
             logger.info(f"Now updating password to HRM default")
 
             # Search for the user and update password to HRM default
@@ -167,7 +166,6 @@ class BankVODAutomation:
             else:
                 result['errors'].append(f"✗ Password update failed: {update_result['message']}")
                 logger.error(f"Password update failed for {user.display_name}")
-            """
 
         except Exception as e:
             logger.error(f"Error during BankVOD automation: {e}")
@@ -468,7 +466,10 @@ class BankVODAutomation:
 
     async def _wait_for_success(self) -> Dict[str, Any]:
         """
-        Wait for success confirmation or handle errors
+        Wait for success confirmation or handle errors.
+
+        Checks the RadWindow iframe first (where form errors appear),
+        then falls back to checking the main page.
 
         Returns:
             Dict with success status, message type, and details
@@ -486,7 +487,53 @@ class BankVODAutomation:
         except Exception as e:
             logger.warning(f"Could not save screenshot: {e}")
 
-        # Check for error alerts (duplicate user, validation errors, etc.)
+        # Check INSIDE the RadWindow iframe first (errors appear here after form submit)
+        try:
+            iframe_element = await self.page.query_selector('iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]')
+            if iframe_element:
+                iframe = await iframe_element.content_frame()
+                if iframe:
+                    iframe_content = await iframe.content()
+                    iframe_text = await iframe.evaluate('() => document.body ? document.body.innerText : ""')
+                    iframe_lower = iframe_text.lower()
+                    logger.info(f"RadWindow iframe text: {iframe_text[:200]}")
+
+                    # Check for duplicate/error keywords in iframe content
+                    if ('duplicate' in iframe_lower) or \
+                       ('invalid email' in iframe_lower) or \
+                       ('already' in iframe_lower and ('exist' in iframe_lower or 'taken' in iframe_lower)):
+                        # Extract just the error line, not the entire form text
+                        error_lines = [line.strip() for line in iframe_text.split('\n') if line.strip()]
+                        error_msg = next(
+                            (line for line in error_lines
+                             if 'duplicate' in line.lower() or 'invalid' in line.lower() or 'already' in line.lower()),
+                            'Cannot have duplicate emails'
+                        )
+                        logger.warning(f"Duplicate user detected in iframe: {error_msg}")
+                        return {
+                            'success': False,
+                            'type': 'duplicate',
+                            'message': f'User already exists - {error_msg}',
+                            'skip': True
+                        }
+
+                    # Check for other error messages in iframe
+                    error_alerts = await iframe.query_selector_all('.alert-danger, .alert-error, .error, [class*="error"], [style*="color:red"], [style*="color: red"], font[color="red"]')
+                    for alert in error_alerts:
+                        if await alert.is_visible():
+                            error_text = await alert.text_content()
+                            if error_text and error_text.strip():
+                                logger.warning(f"Error in iframe: {error_text}")
+                                return {
+                                    'success': False,
+                                    'type': 'error',
+                                    'message': error_text.strip(),
+                                    'skip': False
+                                }
+        except Exception as e:
+            logger.debug(f"Error checking iframe for alerts: {e}")
+
+        # Check main page for error alerts
         try:
             error_alerts = await self.page.locator('.alert-danger, .alert-error, .error, [class*="error"]').all()
             for alert in error_alerts:
@@ -498,7 +545,8 @@ class BankVODAutomation:
                     error_lower = error_text.lower()
                     if ('taken' in error_lower) or \
                        ('already' in error_lower and 'exist' in error_lower) or \
-                       ('duplicate' in error_lower):
+                       ('duplicate' in error_lower) or \
+                       ('invalid email' in error_lower):
                         return {
                             'success': False,
                             'type': 'duplicate',
@@ -529,11 +577,11 @@ class BankVODAutomation:
         except:
             pass
 
-        # Check if modal closed (alternative success indicator)
+        # Check if RadWindow iframe is gone (modal closed = success)
         try:
-            modal_visible = await self.page.is_visible('.modal, [role="dialog"]')
-            if not modal_visible:
-                logger.info("Modal closed - assuming success")
+            iframe_still_present = await self.page.query_selector('iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]')
+            if not iframe_still_present:
+                logger.info("RadWindow closed - assuming success")
                 return {
                     'success': True,
                     'type': 'success',

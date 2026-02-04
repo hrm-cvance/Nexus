@@ -11,7 +11,6 @@ import customtkinter as ctk
 from tkinter import filedialog
 from typing import Optional, Callable
 from datetime import datetime
-from pathlib import Path
 
 from models.automation_result import AutomationSummary, VendorResult
 from services.config_manager import ConfigManager
@@ -237,28 +236,29 @@ class SummaryTab:
     def _create_vendor_result_card(self, vendor_result: VendorResult):
         """Create a vendor result card"""
         card = ctk.CTkFrame(self.vendors_container)
-        card.pack(fill="x", pady=10)
+        card.pack(fill="x", pady=5)
 
-        # Header with vendor name and status
-        header_frame = ctk.CTkFrame(card, fg_color="transparent")
-        header_frame.pack(fill="x", padx=20, pady=(15, 10))
+        # Single row: status icon, vendor name, status text, duration
+        content_frame = ctk.CTkFrame(card, fg_color="transparent")
+        content_frame.pack(fill="x", padx=20, pady=12)
 
-        # Status icon and vendor name
+        # Status icon
         status_icon = "\u2713" if vendor_result.success else "\u2717"
         status_color = "green" if vendor_result.success else "red"
 
         status_label = ctk.CTkLabel(
-            header_frame,
+            content_frame,
             text=status_icon,
-            font=ctk.CTkFont(size=20, weight="bold"),
+            font=ctk.CTkFont(size=18, weight="bold"),
             text_color=status_color
         )
         status_label.pack(side="left", padx=(0, 10))
 
+        # Vendor name
         vendor_label = ctk.CTkLabel(
-            header_frame,
+            content_frame,
             text=vendor_result.display_name,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=ctk.CTkFont(size=14, weight="bold"),
             anchor="w"
         )
         vendor_label.pack(side="left")
@@ -266,140 +266,28 @@ class SummaryTab:
         # Duration on the right
         if vendor_result.duration_seconds > 0:
             duration_label = ctk.CTkLabel(
-                header_frame,
+                content_frame,
                 text=f"{vendor_result.duration_seconds:.1f}s",
                 font=ctk.CTkFont(size=12),
                 text_color="gray"
             )
             duration_label.pack(side="right")
 
-        # Errors section (only show if there are errors)
-        if vendor_result.errors:
-            errors_frame = ctk.CTkFrame(card)
-            errors_frame.pack(fill="x", padx=20, pady=(0, 10))
+        # Status text on the right (before duration)
+        status_text = "Completed" if vendor_result.success else "Failed"
+        if vendor_result.warnings:
+            status_text = vendor_result.warnings[0]
+        elif vendor_result.errors:
+            status_text = vendor_result.errors[0]
 
-            errors_label = ctk.CTkLabel(
-                errors_frame,
-                text="Errors:",
-                font=ctk.CTkFont(size=12, weight="bold"),
-                text_color="red"
-            )
-            errors_label.pack(anchor="w", padx=10, pady=(10, 5))
-
-            for error in vendor_result.errors:
-                error_item = ctk.CTkLabel(
-                    errors_frame,
-                    text=f"  \u2022 {error}",
-                    font=ctk.CTkFont(size=11),
-                    text_color="red",
-                    anchor="w"
-                )
-                error_item.pack(anchor="w", padx=10)
-
-            # Add bottom padding
-            ctk.CTkLabel(errors_frame, text="", height=5).pack()
-
-        # Screenshot thumbnail (placeholder or actual)
-        screenshot_frame = ctk.CTkFrame(card, fg_color="transparent")
-        screenshot_frame.pack(fill="x", padx=20, pady=(0, 15))
-
-        if vendor_result.screenshot_path and Path(vendor_result.screenshot_path).exists():
-            # Create clickable thumbnail
-            self._create_screenshot_thumbnail(screenshot_frame, vendor_result.screenshot_path)
-        else:
-            # Placeholder
-            placeholder_frame = ctk.CTkFrame(screenshot_frame, fg_color="#3a3a3a", height=80, width=150)
-            placeholder_frame.pack(anchor="w")
-            placeholder_frame.pack_propagate(False)
-
-            placeholder_label = ctk.CTkLabel(
-                placeholder_frame,
-                text="[Screenshot\nPlaceholder]",
-                font=ctk.CTkFont(size=10),
-                text_color="gray"
-            )
-            placeholder_label.pack(expand=True)
-
-    def _create_screenshot_thumbnail(self, parent, screenshot_path: str):
-        """Create a clickable screenshot thumbnail"""
-        try:
-            from PIL import Image
-
-            # Load and resize image for thumbnail
-            img = Image.open(screenshot_path)
-            img.thumbnail((200, 150))
-
-            # Convert to CTkImage
-            ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=(200, 150))
-
-            # Create clickable label
-            thumb_label = ctk.CTkLabel(
-                parent,
-                text="",
-                image=ctk_img,
-                cursor="hand2"
-            )
-            thumb_label.pack(anchor="w")
-            thumb_label.image = ctk_img  # Keep reference
-
-            # Bind click event
-            thumb_label.bind("<Button-1>", lambda e: self._show_full_image(screenshot_path))
-
-            # "Click to expand" text
-            expand_hint = ctk.CTkLabel(
-                parent,
-                text="Click to expand",
-                font=ctk.CTkFont(size=10),
-                text_color="gray"
-            )
-            expand_hint.pack(anchor="w")
-
-        except Exception as e:
-            logger.error(f"Error loading screenshot: {e}")
-            error_label = ctk.CTkLabel(
-                parent,
-                text="[Screenshot unavailable]",
-                font=ctk.CTkFont(size=11),
-                text_color="gray"
-            )
-            error_label.pack(anchor="w")
-
-    def _show_full_image(self, image_path: str):
-        """Show full-size image in a popup window"""
-        try:
-            from PIL import Image
-
-            # Create popup window
-            popup = ctk.CTkToplevel(self.parent)
-            popup.title("Screenshot")
-            popup.geometry("1000x700")
-            popup.grab_set()  # Make modal
-
-            # Load full image
-            img = Image.open(image_path)
-
-            # Resize to fit window while maintaining aspect ratio
-            max_width, max_height = 980, 650
-            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
-
-            ctk_img = ctk.CTkImage(light_image=img, dark_image=img, size=img.size)
-
-            # Display image
-            img_label = ctk.CTkLabel(popup, text="", image=ctk_img)
-            img_label.pack(expand=True, pady=10)
-            img_label.image = ctk_img  # Keep reference
-
-            # Close button
-            close_btn = ctk.CTkButton(
-                popup,
-                text="Close",
-                command=popup.destroy,
-                width=100
-            )
-            close_btn.pack(pady=10)
-
-        except Exception as e:
-            logger.error(f"Error showing full image: {e}")
+        status_text_label = ctk.CTkLabel(
+            content_frame,
+            text=status_text,
+            font=ctk.CTkFont(size=12),
+            text_color=status_color,
+            anchor="e"
+        )
+        status_text_label.pack(side="right", padx=(10, 15))
 
     def _on_generate_pdf_clicked(self):
         """Handle Generate PDF button click"""
