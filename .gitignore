@@ -186,3 +186,4 @@ test_data/
 # Keep README images
 !README_images/
 nul
+.claude/
