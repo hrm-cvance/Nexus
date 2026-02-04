@@ -141,6 +141,10 @@ class BankVODAutomation:
             # Step 2 - Update password to HRM default
             logger.info(f"Now updating password to HRM default")
 
+            # Navigate to search screen first
+            await self._navigate_to_search_screen()
+            result['messages'].append("✓ Navigated to search screen")
+
             # Search for the user and update password to HRM default
             await self._search_for_user(user_data['email'])
             result['messages'].append("✓ Found newly created user")
@@ -598,66 +602,72 @@ class BankVODAutomation:
             'message': 'User created/updated successfully'
         }
 
+    async def _navigate_to_search_screen(self):
+        """Navigate to the Authorized Users search screen"""
+        logger.info("Navigating to Authorized Users search screen...")
+        await self.page.goto('https://www.bankvod.com/MyAccount/authorized_users.aspx')
+        await self.page.wait_for_load_state('networkidle')
+        logger.info("Search screen loaded")
+
     async def _search_for_user(self, email: str):
         """
-        Search for a user by email
+        Search for a user by email on the Authorized Users page
 
         Args:
             email: User's email address
         """
         logger.info(f"Searching for user: {email}")
 
-        # Find email input field in search area
-        try:
-            await self.page.fill('input[placeholder*="Email"], input[name*="email"]', email)
-        except:
-            # Try alternative selector
-            search_inputs = await self.page.query_selector_all('input[type="text"], input[type="email"]')
-            for input_field in search_inputs:
-                placeholder = await input_field.get_attribute('placeholder')
-                if placeholder and 'email' in placeholder.lower():
-                    await input_field.fill(email)
-                    break
+        # Fill email search field using exact ID
+        await self.page.fill('#ContentPlaceHolder1_tb_email', email)
+        logger.info(f"Entered email in search field")
 
-        # Click Search button
-        await self.page.click('button:has-text("Search"), input[value="Search"]')
+        # Click Search button using exact ID
+        await self.page.click('#ContentPlaceHolder1_bt_search')
+        logger.info("Clicked Search button")
 
-        # Wait for results
+        # Wait for results to load
         await asyncio.sleep(2)
         await self.page.wait_for_load_state('networkidle')
-
         logger.info("Search completed")
 
     async def _click_update_button(self):
-        """Click Update button for the user"""
+        """Click Update button/link for the user in search results"""
         logger.info("Clicking Update button...")
 
-        # Find and click Update button
-        await self.page.click('button:has-text("Update"), a:has-text("Update")')
+        # The Update link has onclick="openRadWindow(userId)" pattern
+        # Find link with text "Update" that has openRadWindow onclick
+        await self.page.click('a:has-text("Update")[onclick*="openRadWindow"]')
+        logger.info("Clicked Update link")
 
-        # Wait for modal/form to appear
+        # Wait for RadWindow modal to appear
         await asyncio.sleep(2)
-        await self.page.wait_for_selector('input[type="password"]', timeout=10000)
+        await self.page.wait_for_selector('iframe[name*="RadWindow"], iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]', timeout=10000)
         logger.info("Update modal opened")
 
     async def _update_password(self, new_password: str):
         """
-        Update the password field
+        Update the password field in the RadWindow modal
 
         Args:
             new_password: New password to set
         """
         logger.info("Updating password field...")
 
-        # Clear and fill password field
-        password_field = await self.page.query_selector('input[type="password"]')
-        if password_field:
-            await password_field.fill('')
-            await password_field.fill(new_password)
-            logger.info("Password field updated")
-        else:
-            logger.error("Could not find password field")
-            raise Exception("Password field not found")
+        # Get the RadWindow iframe (the update modal is inside an iframe)
+        iframe_element = await self.page.query_selector('iframe[name*="RadWindow"], iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]')
+        if not iframe_element:
+            logger.error("Could not find RadWindow iframe for password update")
+            raise Exception("RadWindow iframe not found")
+
+        iframe = await iframe_element.content_frame()
+        if not iframe:
+            logger.error("Could not access iframe content for password update")
+            raise Exception("Could not access RadWindow iframe content")
+
+        # Fill password field using exact ID (it's type="text", not type="password")
+        await iframe.fill('#t_password', new_password)
+        logger.info("Password field updated")
 
     async def _close_browser(self):
         """Close browser and cleanup"""
