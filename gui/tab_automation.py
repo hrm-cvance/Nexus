@@ -81,6 +81,129 @@ def detect_playwright_error(error_message: str) -> tuple[bool, str]:
     return False, str(error_message)
 
 
+class UsernameConflictDialog(ctk.CTkToplevel):
+    """Dialog for resolving username conflicts in Certified Credit"""
+
+    def __init__(self, parent, display_name: str, attempted_username: str):
+        super().__init__(parent)
+        self.title("Username Conflict")
+        self.geometry("450x280")
+        self.resizable(False, False)
+
+        # Center on parent
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+
+        # Main container
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Warning icon and message
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 15))
+
+        warning_label = ctk.CTkLabel(
+            header_frame,
+            text="⚠️",
+            font=ctk.CTkFont(size=32)
+        )
+        warning_label.pack(side="left", padx=(0, 10))
+
+        msg_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        msg_frame.pack(side="left", fill="x", expand=True)
+
+        title_label = ctk.CTkLabel(
+            msg_frame,
+            text="Username Already Taken",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w"
+        )
+        title_label.pack(anchor="w")
+
+        detail_label = ctk.CTkLabel(
+            msg_frame,
+            text=f"Username '{attempted_username}' is already in use\nfor {display_name}",
+            font=ctk.CTkFont(size=13),
+            text_color="gray",
+            anchor="w",
+            justify="left"
+        )
+        detail_label.pack(anchor="w")
+
+        # Username entry
+        entry_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        entry_frame.pack(fill="x", pady=15)
+
+        entry_label = ctk.CTkLabel(
+            entry_frame,
+            text="Enter alternative username:",
+            font=ctk.CTkFont(size=13)
+        )
+        entry_label.pack(anchor="w", pady=(0, 5))
+
+        self.username_entry = ctk.CTkEntry(entry_frame, width=380, height=35)
+        self.username_entry.pack(fill="x")
+        self.username_entry.insert(0, attempted_username)
+        self.username_entry.select_range(0, 'end')
+        self.username_entry.focus()
+
+        # Bind Enter key to submit
+        self.username_entry.bind('<Return>', lambda e: self._on_submit())
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(20, 0))
+
+        skip_btn = ctk.CTkButton(
+            btn_frame,
+            text="Skip This Vendor",
+            command=self._on_skip,
+            width=150,
+            height=38,
+            fg_color="gray",
+            hover_color="#555555"
+        )
+        skip_btn.pack(side="left")
+
+        submit_btn = ctk.CTkButton(
+            btn_frame,
+            text="Try This Username",
+            command=self._on_submit,
+            width=150,
+            height=38,
+            fg_color="green",
+            hover_color="#006400"
+        )
+        submit_btn.pack(side="right")
+
+        # Wait for window to close
+        self.protocol("WM_DELETE_WINDOW", self._on_skip)
+
+    def _on_submit(self):
+        """User chose to try a new username"""
+        new_username = self.username_entry.get().strip()
+        if new_username:
+            self.result = new_username
+            self.destroy()
+
+    def _on_skip(self):
+        """User chose to skip this vendor"""
+        self.result = None
+        self.destroy()
+
+    def get_result(self) -> Optional[str]:
+        """
+        Wait for dialog to close and return result
+
+        Returns:
+            New username string, or None if user chose to skip
+        """
+        self.wait_window()
+        return self.result
+
+
 class AutomationStatusTab:
     """Automation Status tab implementation"""
 
@@ -629,13 +752,55 @@ class AutomationStatusTab:
             self.automation_summary.vendor_results.append(vendor_result)
 
     async def _run_certifiedcredit_automation(self, vendor: VendorConfig):
-        """Run Certified Credit automation"""
+        """Run Certified Credit automation with username conflict handling"""
         vendor_result = VendorResult(
             vendor_name=vendor.name,
             display_name=vendor.display_name,
             success=False,
             start_time=datetime.now()
         )
+
+        # Store for dialog result communication between threads
+        dialog_result_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_username_conflict(display_name: str, attempted_username: str) -> Optional[str]:
+            """
+            Callback to prompt user when username is taken.
+            Shows a dialog on the main thread and waits for the response.
+            """
+            logger.info(f"Username conflict detected for {display_name}: {attempted_username}")
+            dialog_result_holder['ready'].clear()
+            dialog_result_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = UsernameConflictDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_username=attempted_username
+                    )
+                    dialog_result_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Error showing username conflict dialog: {e}")
+                    dialog_result_holder['result'] = None
+                finally:
+                    dialog_result_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            while not dialog_result_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
+
+            result = dialog_result_holder['result']
+            if result:
+                logger.info(f"User provided alternative username: {result}")
+            else:
+                logger.info("User chose to skip CertifiedCredit")
+
+            return result
 
         try:
             # Import automation module
@@ -658,8 +823,13 @@ class AutomationStatusTab:
             # Add status message
             self._add_vendor_message(vendor.name, "Starting Certified Credit automation...")
 
-            # Run automation (no API key needed for Certified Credit)
-            result = await provision_user(self.current_user, str(config_path), api_key=None)
+            # Run automation with username conflict callback
+            result = await provision_user(
+                self.current_user,
+                str(config_path),
+                api_key=None,
+                on_username_conflict=handle_username_conflict
+            )
 
             # Display results
             for msg in result.get('messages', []):

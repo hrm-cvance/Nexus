@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable, Awaitable
 
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 
@@ -47,18 +47,27 @@ class CertifiedCreditAutomation:
         logger.info(f"Loaded config from {self.config_path}")
         return config
 
-    async def create_account(self, user: EntraUser, headless: bool = False) -> Dict[str, Any]:
+    async def create_account(
+        self,
+        user: EntraUser,
+        headless: bool = False,
+        on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+    ) -> Dict[str, Any]:
         """
         Create a Certified Credit account for the given user
 
         Args:
             user: EntraUser object with user details
             headless: Whether to run browser in headless mode
+            on_username_conflict: Async callback when username is taken.
+                Receives (display_name, attempted_username).
+                Should return new username to try, or None to skip this vendor.
 
         Returns:
             Dict with success status and messages
         """
         self.current_user = user
+        self.on_username_conflict = on_username_conflict
         logger.info(f"Starting Certified Credit automation for {user.display_name}")
 
         result = {
@@ -93,69 +102,68 @@ class CertifiedCreditAutomation:
             await self._click_add_button()
             result['messages'].append("✓ Opened New User form")
 
-            # Try to create user with duplicate username handling
-            max_attempts = 10
-            original_username = user_data['username']
+            # Fill user form
+            await self._fill_user_form(user_data)
+            result['messages'].append("✓ Filled user form")
 
-            for attempt in range(max_attempts):
-                if attempt > 0:
-                    # Modify username by adding a number
-                    user_data['username'] = f"{original_username}{attempt}"
-                    logger.info(f"Retrying with username: {user_data['username']}")
-                    result['messages'].append(f"ℹ Retrying with username: {user_data['username']}")
+            # Configure Access Permissions
+            await self._configure_access_permissions()
+            result['messages'].append("✓ Configured access permissions")
 
-                    # Clear and refill username field
-                    await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', '')
-                    await asyncio.sleep(0.5)
-                    await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', user_data['username'])
-                    logger.info(f"Updated username to: {user_data['username']}")
+            # Save user and check for duplicate
+            save_result = await self._save_user(user_data['username'])
 
-                    # Trigger blur/change events to run validation (simulates tabbing out)
-                    logger.info("Triggering username validation by pressing Tab...")
-                    await self.popup.press('#ctrlBasicInfo_txtLogin_Input', 'Tab')
-                    await asyncio.sleep(1)  # Wait for validation to complete
-                    logger.info("Username validation triggered")
+            # Handle duplicate USER (email/name already exists) - graceful exit with warning
+            if save_result.get('skip', False):
+                result['success'] = False
+                result['warnings'].append(f"⚠ {save_result['message']} - Account was not created (user already exists)")
+                logger.info(f"User already exists in Certified Credit: {user.display_name}")
+                return result
 
-                    # Re-enter passwords (they may have been cleared by error)
-                    logger.info("Re-entering passwords...")
-                    await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword_Input', user_data['password'])
-                    await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword2_Input', user_data['password'])
-                    logger.info("Passwords re-entered")
+            # Handle duplicate USERNAME - prompt user for decision
+            if save_result.get('duplicate_username', False):
+                if on_username_conflict:
+                    # Ask user for alternative username or skip
+                    result['messages'].append(f"ℹ Username '{user_data['username']}' is already taken")
+                    new_username = await on_username_conflict(user.display_name, user_data['username'])
 
-                # Fill user form (first time) or just update username (retry)
-                if attempt == 0:
-                    await self._fill_user_form(user_data)
-                    result['messages'].append("✓ Filled user form")
-
-                    # Configure Access Permissions
-                    await self._configure_access_permissions()
-                    result['messages'].append("✓ Configured access permissions")
-
-                # Save user and check for duplicate
-                save_result = await self._save_user()
-
-                if save_result:
-                    # Save succeeded, no duplicate
-                    result['messages'].append("✓ Saved user")
-                    if attempt > 0:
-                        result['warnings'].append(f"Username '{original_username}' was taken, used '{user_data['username']}' instead")
-                    break
-                else:
-                    # Duplicate detected
-                    if attempt == max_attempts - 1:
-                        error_msg = f"Could not find available username after {max_attempts} attempts"
-                        logger.error(error_msg)
-                        result['errors'].append(error_msg)
+                    if new_username is None:
+                        # User chose to skip
                         result['success'] = False
+                        result['warnings'].append(f"⚠ Username '{user_data['username']}' already exists - User chose to skip")
+                        logger.info(f"User skipped CertifiedCredit due to username conflict: {user.display_name}")
                         return result
-                    logger.info(f"Username '{user_data['username']}' already exists, trying next number...")
+                    else:
+                        # User provided alternative username - update and retry save
+                        user_data['username'] = new_username
+                        await self._update_username_field(new_username, user_data['password'])
+                        result['messages'].append(f"ℹ Trying alternate username: {new_username}")
+
+                        # Retry save with new username
+                        save_result = await self._save_user(new_username)
+                        if not save_result['success']:
+                            result['errors'].append(f"✗ {save_result['message']}")
+                            return result
+                        result['messages'].append(f"✓ Used alternate username: {new_username}")
+                else:
+                    # No callback provided - fail with error
+                    result['success'] = False
+                    result['errors'].append(f"✗ Username '{user_data['username']}' already exists")
+                    return result
+            elif not save_result['success']:
+                # Some other error occurred
+                result['errors'].append(f"✗ {save_result['message']}")
+                return result
+            else:
+                # Save succeeded on first try
+                result['messages'].append("✓ Saved user")
 
             # Configure Restrictions
             await self._configure_restrictions(user_data)
             result['messages'].append("✓ Configured restrictions")
 
             # Final save
-            await self._save_user()
+            await self._save_user(user_data['username'])
             result['messages'].append("✓ User created successfully")
 
             result['success'] = True
@@ -169,7 +177,9 @@ class CertifiedCreditAutomation:
 
             # Take error screenshot
             try:
-                if self.page:
+                if self.popup:
+                    await self.popup.screenshot(path=f'certifiedcredit_error_{user.display_name.replace(" ", "_")}.png')
+                elif self.page:
                     await self.page.screenshot(path=f'certifiedcredit_error_{user.display_name.replace(" ", "_")}.png')
             except:
                 pass
@@ -550,9 +560,26 @@ class CertifiedCreditAutomation:
             await self.popup.screenshot(path='certifiedcredit_permissions_error.png')
             raise
 
-    async def _save_user(self):
-        """Click Save button in popup"""
+    async def _save_user(self, current_username: str) -> Dict[str, Any]:
+        """
+        Click Save button in popup and check for errors
+
+        Args:
+            current_username: The username being saved (for tracking)
+
+        Returns:
+            Dict with 'success', 'type', 'message', 'skip', 'duplicate_username' keys
+        """
         logger.info("Saving user...")
+
+        save_result = {
+            'success': True,
+            'type': 'success',
+            'message': 'User saved successfully',
+            'skip': False,
+            'duplicate_username': False,
+            'current_username': current_username
+        }
 
         try:
             # Take screenshot before save
@@ -570,33 +597,113 @@ class CertifiedCreditAutomation:
             # Wait for save to complete
             await asyncio.sleep(2)
 
-            # Check for duplicate login error (case-insensitive partial match)
+            # Check page content for errors
             try:
-                logger.info("Checking page content for duplicate login error...")
-                # Check page content for duplicate login message
+                logger.info("Checking page content for errors...")
                 page_content = await self.popup.content()
-                if 'duplicate' in page_content.lower() and 'login' in page_content.lower():
-                    logger.warning("❌ DUPLICATE LOGIN DETECTED in page content")
+                page_lower = page_content.lower()
+
+                # Check for duplicate USERNAME (login field)
+                if 'duplicate' in page_lower and 'login' in page_lower:
+                    logger.warning("❌ DUPLICATE USERNAME DETECTED in page content")
                     await self.popup.screenshot(path='certifiedcredit_duplicate_login.png')
 
                     # Save HTML for debugging
                     with open('certifiedcredit_duplicate_error.html', 'w', encoding='utf-8') as f:
                         f.write(page_content)
 
-                    return False  # Indicate duplicate
-                else:
-                    logger.info("✓ No duplicate login error found")
+                    save_result['success'] = False
+                    save_result['type'] = 'duplicate_username'
+                    save_result['duplicate_username'] = True
+                    save_result['message'] = f"Username '{current_username}' already exists"
+                    return save_result
+
+                # Check for duplicate USER (email/name)
+                duplicate_user_check = await self._check_for_duplicate_user()
+                if duplicate_user_check['is_duplicate']:
+                    save_result['success'] = False
+                    save_result['type'] = 'duplicate_user'
+                    save_result['message'] = duplicate_user_check['message']
+                    save_result['skip'] = True
+                    return save_result
+
+                logger.info("✓ No errors found")
+
             except Exception as e:
                 logger.warning(f"Error checking for duplicate: {e}")
 
             await asyncio.sleep(1)
             logger.info("✓ User saved successfully")
-            return True  # Successful save
+            return save_result
 
         except Exception as e:
             logger.error(f"Save failed: {e}")
             await self.popup.screenshot(path='certifiedcredit_save_error.png')
-            raise
+            save_result['success'] = False
+            save_result['type'] = 'error'
+            save_result['message'] = str(e)
+            return save_result
+
+    async def _check_for_duplicate_user(self) -> Dict[str, Any]:
+        """
+        Check if page shows duplicate user error (by email/name, not username)
+
+        Returns:
+            Dict with 'is_duplicate', 'message', 'skip' keys
+        """
+        result = {'is_duplicate': False, 'message': '', 'skip': False}
+
+        try:
+            if self.popup:
+                page_content = await self.popup.content()
+                page_lower = page_content.lower()
+
+                # Keywords indicating duplicate USER (not just username)
+                # These are different from "duplicate login" which is handled separately
+                duplicate_user_indicators = [
+                    ('email' in page_lower and 'already' in page_lower),
+                    ('email' in page_lower and 'exists' in page_lower),
+                    ('email' in page_lower and 'registered' in page_lower),
+                    ('email' in page_lower and 'duplicate' in page_lower and 'login' not in page_lower),
+                    ('user' in page_lower and 'already' in page_lower and 'exists' in page_lower),
+                    ('account' in page_lower and 'already' in page_lower and 'exists' in page_lower),
+                ]
+
+                if any(duplicate_user_indicators):
+                    logger.warning("Duplicate user detected (by email/name)")
+                    result['is_duplicate'] = True
+                    result['skip'] = True
+                    result['message'] = 'User already exists (email may be registered)'
+                    await self.popup.screenshot(path='certifiedcredit_duplicate_user.png')
+
+        except Exception as e:
+            logger.warning(f"Error checking for duplicate user: {e}")
+
+        return result
+
+    async def _update_username_field(self, new_username: str, password: str):
+        """
+        Update the username field with a new value after duplicate detected
+
+        Args:
+            new_username: The new username to try
+            password: The password to re-enter (may be cleared by validation)
+        """
+        logger.info(f"Updating username field to: {new_username}")
+
+        await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', '')
+        await asyncio.sleep(0.3)
+        await self.popup.fill('#ctrlBasicInfo_txtLogin_Input', new_username)
+
+        # Trigger blur/change events to run validation
+        await self.popup.press('#ctrlBasicInfo_txtLogin_Input', 'Tab')
+        await asyncio.sleep(0.5)
+
+        # Re-enter passwords (they may have been cleared by validation)
+        logger.info("Re-entering passwords...")
+        await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword_Input', password)
+        await self.popup.fill('#ctrlBasicInfo_ctrlAddUserOptions_txtPassword2_Input', password)
+        logger.info("Username field updated")
 
     async def _configure_restrictions(self, user_data: Dict[str, Any]):
         """
@@ -708,7 +815,12 @@ class CertifiedCreditAutomation:
             raise
 
 
-async def provision_user(user: EntraUser, config_path: str, api_key: Optional[str] = None) -> Dict[str, Any]:
+async def provision_user(
+    user: EntraUser,
+    config_path: str,
+    api_key: Optional[str] = None,
+    on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+) -> Dict[str, Any]:
     """
     Provision a Certified Credit user account
 
@@ -716,6 +828,9 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
         user: EntraUser object with user details
         config_path: Path to vendor config.json
         api_key: Optional API key (not used for Certified Credit)
+        on_username_conflict: Async callback when username is taken.
+            Receives (display_name, attempted_username).
+            Should return new username to try, or None to skip this vendor.
 
     Returns:
         Dict with status, success boolean, and any messages/errors
@@ -730,7 +845,11 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
     # Create automation instance
     automation = CertifiedCreditAutomation(config_path, keyvault)
 
-    # Run automation
-    result = await automation.create_account(user, headless=False)
+    # Run automation with callback
+    result = await automation.create_account(
+        user,
+        headless=False,
+        on_username_conflict=on_username_conflict
+    )
 
     return result
