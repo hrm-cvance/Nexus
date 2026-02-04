@@ -137,10 +137,11 @@ class AccountChekAutomation:
                 result['messages'].append(f"✓ {success_result['message']}")
                 logger.info(f"Successfully created AccountChek account for {user.display_name}")
             elif success_result.get('skip', False):
-                # Duplicate user - don't treat as failure
+                # Duplicate user - don't treat as failure, return immediately
                 result['success'] = False
                 result['warnings'].append(f"⚠ {success_result['message']} - Account was not created (user already exists)")
                 logger.info(f"User already exists in AccountChek: {user.display_name}")
+                return result
             else:
                 # Real error
                 result['errors'].append(f"✗ {success_result['message']}")
