@@ -81,6 +81,115 @@ def detect_playwright_error(error_message: str) -> tuple[bool, str]:
     return False, str(error_message)
 
 
+class DuplicateNameConfirmDialog(ctk.CTkToplevel):
+    """Dialog for confirming duplicate first/last name in DataVerify"""
+
+    def __init__(self, parent, display_name: str):
+        super().__init__(parent)
+        self.title("Duplicate Name Warning")
+        self.geometry("450x220")
+        self.resizable(False, False)
+
+        # Center on parent
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = False
+
+        # Main container
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Warning icon and message
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 15))
+
+        warning_label = ctk.CTkLabel(
+            header_frame,
+            text="⚠️",
+            font=ctk.CTkFont(size=32)
+        )
+        warning_label.pack(side="left", padx=(0, 10))
+
+        msg_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        msg_frame.pack(side="left", fill="x", expand=True)
+
+        title_label = ctk.CTkLabel(
+            msg_frame,
+            text="Duplicate Name Exists",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w"
+        )
+        title_label.pack(anchor="w")
+
+        detail_label = ctk.CTkLabel(
+            msg_frame,
+            text=f"Another user with the same First and Last Name\nalready exists for '{display_name}'",
+            font=ctk.CTkFont(size=13),
+            text_color="gray",
+            anchor="w",
+            justify="left"
+        )
+        detail_label.pack(anchor="w")
+
+        # Question label
+        question_label = ctk.CTkLabel(
+            main_frame,
+            text="Do you want to proceed and create this user anyway?",
+            font=ctk.CTkFont(size=13)
+        )
+        question_label.pack(pady=15)
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(20, 0))
+
+        skip_btn = ctk.CTkButton(
+            btn_frame,
+            text="Skip This Vendor",
+            command=self._on_skip,
+            width=150,
+            height=38,
+            fg_color="gray",
+            hover_color="#555555"
+        )
+        skip_btn.pack(side="left")
+
+        proceed_btn = ctk.CTkButton(
+            btn_frame,
+            text="Proceed Anyway",
+            command=self._on_proceed,
+            width=150,
+            height=38,
+            fg_color="green",
+            hover_color="#006400"
+        )
+        proceed_btn.pack(side="right")
+
+        # Wait for window to close
+        self.protocol("WM_DELETE_WINDOW", self._on_skip)
+
+    def _on_proceed(self):
+        """User chose to proceed"""
+        self.result = True
+        self.destroy()
+
+    def _on_skip(self):
+        """User chose to skip this vendor"""
+        self.result = False
+        self.destroy()
+
+    def get_result(self) -> bool:
+        """
+        Wait for dialog to close and return result
+
+        Returns:
+            True if user chose to proceed, False if skipped
+        """
+        self.wait_window()
+        return self.result
+
+
 class UsernameConflictDialog(ctk.CTkToplevel):
     """Dialog for resolving username conflicts in Certified Credit"""
 
@@ -726,13 +835,93 @@ class AutomationStatusTab:
             self.automation_summary.vendor_results.append(vendor_result)
 
     async def _run_dataverify_automation(self, vendor: VendorConfig):
-        """Run DataVerify automation"""
+        """Run DataVerify automation with username conflict handling"""
         vendor_result = VendorResult(
             vendor_name=vendor.name,
             display_name=vendor.display_name,
             success=False,
             start_time=datetime.now()
         )
+
+        # Store for dialog result communication between threads
+        dialog_result_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_username_conflict(display_name: str, attempted_username: str) -> Optional[str]:
+            """
+            Callback to prompt user when username is taken.
+            Shows a dialog on the main thread and waits for the response.
+            """
+            logger.info(f"Username conflict detected for {display_name}: {attempted_username}")
+            dialog_result_holder['ready'].clear()
+            dialog_result_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = UsernameConflictDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_username=attempted_username
+                    )
+                    dialog_result_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Dialog error: {e}")
+                    dialog_result_holder['result'] = None
+                finally:
+                    dialog_result_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            dialog_result_holder['ready'].wait(timeout=300)  # 5 minute timeout
+
+            result = dialog_result_holder['result']
+            if result:
+                logger.info(f"User provided alternate username: {result}")
+            else:
+                logger.info("User chose to skip DataVerify")
+
+            return result
+
+        # Store for duplicate name confirmation
+        confirm_result_holder = {'result': False, 'ready': threading.Event()}
+
+        async def handle_duplicate_name_confirm(display_name: str) -> bool:
+            """
+            Callback to prompt user when duplicate first/last name exists.
+            Shows a confirmation dialog on the main thread.
+            """
+            logger.info(f"Duplicate name detected for {display_name}")
+            confirm_result_holder['ready'].clear()
+            confirm_result_holder['result'] = False
+
+            def show_confirm_dialog():
+                """Show confirmation dialog on main UI thread"""
+                try:
+                    dialog = DuplicateNameConfirmDialog(
+                        self.parent,
+                        display_name=display_name
+                    )
+                    confirm_result_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Confirm dialog error: {e}")
+                    confirm_result_holder['result'] = False
+                finally:
+                    confirm_result_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_confirm_dialog)
+
+            # Wait for dialog result
+            confirm_result_holder['ready'].wait(timeout=300)
+
+            if confirm_result_holder['result']:
+                logger.info("User confirmed to proceed with duplicate name")
+            else:
+                logger.info("User declined to proceed with duplicate name")
+
+            return confirm_result_holder['result']
 
         try:
             # Import automation module
@@ -757,8 +946,14 @@ class AutomationStatusTab:
             # Add status message
             self._add_vendor_message(vendor.name, "Starting DataVerify automation...")
 
-            # Run automation (no API key needed for DataVerify)
-            result = await provision_user(self.current_user, str(config_path), api_key=None)
+            # Run automation with callbacks
+            result = await provision_user(
+                self.current_user,
+                str(config_path),
+                api_key=None,
+                on_username_conflict=handle_username_conflict,
+                on_duplicate_name_confirm=handle_duplicate_name_confirm
+            )
 
             # Display results
             logger.info(f"DataVerify result: {result}")
