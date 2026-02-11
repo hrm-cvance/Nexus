@@ -131,7 +131,9 @@ az role assignment create \
 
 ## Step 3: Add Vendor Secrets
 
-All secrets follow the naming convention: `{vendorname}-{credential-type}`
+Most secrets follow the naming convention: `{vendorname}-{credential-type}`
+
+There is also one shared secret (`hrm-defaultpassword`) used across vendors for default new-user passwords.
 
 Secret names may only contain alphanumeric characters and hyphens.
 
@@ -243,6 +245,7 @@ Below is the full inventory of Key Vault secrets required for each vendor.
 | `dataverify-login-url` | Admin portal login URL |
 | `dataverify-admin-username` | Admin login username |
 | `dataverify-admin-password` | Admin login password |
+| `hrm-defaultpassword` | Shared default password for new users (used during password reset step) |
 
 ### MMI
 
@@ -276,6 +279,14 @@ Below is the full inventory of Key Vault secrets required for each vendor.
 | `experience-admin-email` | Admin login email |
 | `experience-admin-password` | Admin login password |
 
+### Shared Secrets
+
+These secrets are not vendor-prefixed and are shared across vendors.
+
+| Secret Name | Used By | Description |
+|---|---|---|
+| `hrm-defaultpassword` | DataVerify | Default password assigned to new user accounts during the password reset step |
+
 ### Summary
 
 | Vendor | Secrets | Notes |
@@ -284,12 +295,12 @@ Below is the full inventory of Key Vault secrets required for each vendor.
 | BankVOD | 5 | Has unique `login-account-id` field |
 | Certified Credit | 4 | Uses `admin-username`; has `default-password` |
 | Clear Capital | 3 | Standard |
-| DataVerify | 3 | Standard |
+| DataVerify | 4 | Uses shared `hrm-defaultpassword` for password reset |
 | MMI | 3 | Standard |
 | Partners Credit | 3 | Standard |
 | The Work Number | 3 | Standard |
 | Experience.com | 3 | Uses `admin-email`; currently disabled |
-| **Total** | **31** | |
+| **Total** | **32** | Including 1 shared secret (`hrm-defaultpassword`) |
 
 ## Troubleshooting
 
