@@ -52,7 +52,7 @@ models/
   user.py                        # EntraUser model
   vendor.py                      # Vendor config models
   automation_result.py           # Automation result models
-vendors/{VendorName}/
+Vendors/{VendorName}/
   config.json                    # Vendor-specific config (org, roles, URLs)
   roles.json                     # Role mappings (if applicable)
 config/
@@ -76,7 +76,7 @@ Each vendor automation module in `automation/vendors/` follows this pattern:
 When a vendor reports a duplicate username/email, the automation calls async callbacks (`on_username_conflict`, `on_email_conflict`) that display a dialog to the user via `threading.Event` synchronization between the async automation thread and the Tkinter GUI thread. The dialog classes are `UsernameConflictDialog` and `EmailConflictDialog` in `gui/tab_automation.py`.
 
 ### Vendor Config
-Each vendor has a config in `vendors/{VendorName}/config.json` and a mapping entry in `config/vendor_mappings.json` that links an Entra AD group to the automation module.
+Each vendor has a config in `Vendors/{VendorName}/config.json` and a mapping entry in `config/vendor_mappings.json` that links an Entra AD group to the automation module.
 
 ### Key Vault Secret Naming
 Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url`, `accountchek-admin-password`).

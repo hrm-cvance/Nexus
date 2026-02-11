@@ -273,7 +273,7 @@ Nexus/
 │   ├── user.py                        # EntraUser model
 │   ├── vendor.py                      # Vendor configuration model
 │   └── automation_result.py           # Provisioning result model
-├── vendors/                           # Per-vendor configuration
+├── Vendors/                           # Per-vendor configuration
 │   ├── {VendorName}/
 │   │   ├── config.json                # Vendor-specific settings (org, roles, URLs)
 │   │   └── roles.json                 # Role mappings (if applicable)

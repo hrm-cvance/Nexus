@@ -107,7 +107,7 @@ screenshots/
 *.jpg
 *.jpeg
 *.gif
-!vendors/*/logo.png
+!Vendors/*/logo.png
 !docs/*.png
 
 # Temporary files
@@ -166,10 +166,10 @@ package-lock.json
 nul
 
 # Stale per-vendor docs (superseded by centralized docs/)
-vendors/*/keyvault_secrets.md
-vendors/*/README.md
-vendors/*/SETUP_INSTRUCTIONS.md
-vendors/*/*_ONBOARDING.md
+Vendors/*/keyvault_secrets.md
+Vendors/*/README.md
+Vendors/*/SETUP_INSTRUCTIONS.md
+Vendors/*/*_ONBOARDING.md
 NEXUS_GUI_DESIGN_SPEC.md
 
 # ==============================================================================
@@ -201,7 +201,7 @@ test_data/
 # ==============================================================================
 
 # Keep vendor logos
-!vendors/*/logo.png
+!Vendors/*/logo.png
 
 # Keep documentation images
 !docs/images/*.png

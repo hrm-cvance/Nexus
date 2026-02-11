@@ -85,8 +85,8 @@
       "entra_group_id": "",
       "vendor_name": "Experience",
       "vendor_display_name": "Experience.com",
-      "vendor_logo": "vendors/Experience/logo.png",
-      "vendor_config": "vendors/Experience/config.json",
+      "vendor_logo": "Vendors/Experience/logo.png",
+      "vendor_config": "Vendors/Experience/config.json",
       "automation_module": "automation.vendors.experience",
       "enabled": false
     }
