@@ -605,7 +605,8 @@ class BankVODAutomation:
     async def _navigate_to_search_screen(self):
         """Navigate to the Authorized Users search screen"""
         logger.info("Navigating to Authorized Users search screen...")
-        await self.page.goto('https://www.bankvod.com/MyAccount/authorized_users.aspx')
+        search_url = self.keyvault.get_vendor_credential('bankvod', 'login-url')
+        await self.page.goto(search_url)
         await self.page.wait_for_load_state('networkidle')
         logger.info("Search screen loaded")
 

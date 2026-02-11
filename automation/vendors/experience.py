@@ -1305,7 +1305,7 @@ class ExperienceAutomation:
 
             # Fallback: Evaluate JavaScript to find the URL
             if not profile_url:
-                profile_url = await self.page.evaluate('''() => {
+                profile_url = await self.page.evaluate(r'''() => {
                     // Look for "Visit user profile" text and get the URL
                     const visitText = document.body.innerText;
                     const match = visitText.match(/https?:\/\/(?:pro\.)?experience\.com\/reviews\/[a-zA-Z0-9\-_]+(?:-\d+)?/);

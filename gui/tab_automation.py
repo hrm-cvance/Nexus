@@ -11,6 +11,7 @@ Shows real-time status of account provisioning automation:
 
 import customtkinter as ctk
 import asyncio
+import os
 import threading
 import subprocess
 import sys
@@ -30,26 +31,32 @@ def is_playwright_browser_installed() -> tuple[bool, str]:
     """
     Check if Playwright browsers are installed.
 
+    Checks PLAYWRIGHT_BROWSERS_PATH env var first (set by Intune deployment
+    to a shared machine-wide location), then falls back to the default
+    per-user path.
+
     Returns:
         Tuple of (is_installed, error_message)
     """
     try:
-        # Check if chromium executable exists in expected location
         import platform
-        home = Path.home()
 
-        if platform.system() == "Windows":
-            playwright_path = home / "AppData" / "Local" / "ms-playwright"
+        # Check PLAYWRIGHT_BROWSERS_PATH first (set by Intune deployment)
+        custom_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
+        if custom_path:
+            playwright_path = Path(custom_path)
+        elif platform.system() == "Windows":
+            playwright_path = Path.home() / "AppData" / "Local" / "ms-playwright"
         else:
-            playwright_path = home / ".cache" / "ms-playwright"
+            playwright_path = Path.home() / ".cache" / "ms-playwright"
 
         if not playwright_path.exists():
-            return False, "Playwright browsers not installed. Run: playwright install chromium"
+            return False, "Playwright Chromium browser not found. Please contact IT support."
 
         # Check for any chromium folder
         chromium_folders = list(playwright_path.glob("chromium-*"))
         if not chromium_folders:
-            return False, "Chromium browser not installed. Run: playwright install chromium"
+            return False, "Chromium browser not found. Please contact IT support."
 
         return True, ""
     except Exception as e:
@@ -68,14 +75,14 @@ def detect_playwright_error(error_message: str) -> tuple[bool, str]:
 
     if "executable doesn't exist" in error_lower or "browsertype.launch" in error_lower:
         return True, (
-            "Playwright browser not installed. "
-            "Please run 'playwright install chromium' in terminal and try again."
+            "Playwright Chromium browser not found. "
+            "Please contact IT support to reinstall the browser component."
         )
 
     if "playwright" in error_lower and "install" in error_lower:
         return True, (
-            "Playwright needs to be updated. "
-            "Please run 'playwright install' in terminal and try again."
+            "Playwright browser needs to be updated. "
+            "Please contact IT support to update the browser component."
         )
 
     return False, str(error_message)

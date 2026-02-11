@@ -2,106 +2,36 @@
 Configuration Manager Service
 
 Handles loading and managing application configuration:
-- Detects first run and initializes AppData directory
-- Extracts embedded config files to AppData
-- Loads and validates configuration
-- Manages user settings
+- Loads app config and vendor mappings from bundled resources
+- Validates configuration completeness
 """
 
 import os
+import sys
 import json
-import shutil
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any
 
 
 class ConfigManager:
-    """Manages application configuration and first-run initialization"""
+    """Manages application configuration"""
 
     def __init__(self):
-        self.project_root = Path(__file__).parent.parent
-        self.appdata_root = self._get_appdata_path()
+        # When running as a PyInstaller bundle, data files are extracted to sys._MEIPASS
+        if getattr(sys, 'frozen', False):
+            self.project_root = Path(sys._MEIPASS)
+        else:
+            self.project_root = Path(__file__).parent.parent
+
         self.config = None
         self.vendor_mappings = None
-        self.user_settings = None
 
-        # Load configurations
+        # Load configurations from bundled resources
         self._load_configurations()
 
-    def _get_appdata_path(self) -> Path:
-        """Get the AppData path for Nexus"""
-        if os.name == 'nt':  # Windows
-            appdata = os.environ.get('APPDATA', '')
-            if not appdata:
-                appdata = Path.home() / 'AppData' / 'Roaming'
-            return Path(appdata) / 'Nexus'
-        else:  # macOS/Linux
-            return Path.home() / '.nexus'
-
-    def is_first_run(self) -> bool:
-        """Check if this is the first run of the application"""
-        return not (self.appdata_root / 'config' / 'app_config.json').exists()
-
-    def initialize_first_run(self):
-        """Initialize application on first run"""
-        print("Initializing Nexus for first run...")
-
-        # Create directory structure
-        directories = [
-            self.appdata_root / 'config',
-            self.appdata_root / 'logs',
-            self.appdata_root / 'screenshots',
-            self.appdata_root / 'browsers'
-        ]
-
-        for directory in directories:
-            directory.mkdir(parents=True, exist_ok=True)
-            print(f"Created directory: {directory}")
-
-        # Copy config files from embedded resources to AppData
-        config_files = [
-            'app_config.json',
-            'vendor_mappings.json'
-        ]
-
-        for config_file in config_files:
-            source = self.project_root / 'config' / config_file
-            destination = self.appdata_root / 'config' / config_file
-
-            if source.exists():
-                shutil.copy2(source, destination)
-                print(f"Copied {config_file} to AppData")
-            else:
-                print(f"Warning: {config_file} not found in project directory")
-
-        # Create default user settings
-        default_settings = {
-            "ui": {
-                "theme": "dark",
-                "show_screenshots": True,
-                "auto_scroll_logs": True
-            },
-            "automation": {
-                "headless_mode": False,
-                "timeout_seconds": 120,
-                "auto_retry": True
-            }
-        }
-
-        settings_path = self.appdata_root / 'config' / 'user_settings.json'
-        with open(settings_path, 'w') as f:
-            json.dump(default_settings, f, indent=2)
-        print("Created default user settings")
-
-        print("First run initialization complete!")
-
     def _load_configurations(self):
-        """Load all configuration files"""
-        # Determine config directory (AppData if exists, else project directory)
-        if (self.appdata_root / 'config').exists():
-            config_dir = self.appdata_root / 'config'
-        else:
-            config_dir = self.project_root / 'config'
+        """Load all configuration files from bundled resources"""
+        config_dir = self.project_root / 'config'
 
         # Load app config
         app_config_path = config_dir / 'app_config.json'
@@ -118,14 +48,6 @@ class ConfigManager:
                 self.vendor_mappings = json.load(f)
         else:
             self.vendor_mappings = {"mappings": []}
-
-        # Load user settings
-        user_settings_path = config_dir / 'user_settings.json'
-        if user_settings_path.exists():
-            with open(user_settings_path, 'r') as f:
-                self.user_settings = json.load(f)
-        else:
-            self.user_settings = {}
 
     def get(self, key_path: str, default: Any = None) -> Any:
         """
@@ -155,21 +77,6 @@ class ConfigManager:
         """Get only disabled vendor mappings"""
         return [v for v in self.get_vendor_mappings() if not v.get('enabled', True)]
 
-    def save_user_settings(self, settings: Dict[str, Any]):
-        """Save user settings to file"""
-        settings_path = self.appdata_root / 'config' / 'user_settings.json'
-        with open(settings_path, 'w') as f:
-            json.dump(settings, f, indent=2)
-        self.user_settings = settings
-
-    def get_log_path(self) -> Path:
-        """Get the logs directory path"""
-        return self.appdata_root / 'logs'
-
-    def get_screenshots_path(self) -> Path:
-        """Get the screenshots directory path"""
-        return self.appdata_root / 'screenshots'
-
     def validate_configuration(self) -> tuple[bool, list]:
         """
         Validate configuration completeness
@@ -195,4 +102,4 @@ class ConfigManager:
         return (len(errors) == 0, errors)
 
     def __repr__(self):
-        return f"<ConfigManager appdata={self.appdata_root}>"
+        return f"<ConfigManager project_root={self.project_root}>"

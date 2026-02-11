@@ -38,6 +38,7 @@ class TheWorkNumberAutomation:
         self.browser: Optional[Browser] = None
         self.page: Optional[Page] = None
         self.current_user: Optional[EntraUser] = None
+        self._login_frame = None
 
     def _load_config(self) -> Dict[str, Any]:
         """Load vendor configuration from JSON file"""

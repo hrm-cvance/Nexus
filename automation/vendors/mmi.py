@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable, Awaitable
 
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 
@@ -46,18 +46,27 @@ class MMIAutomation:
         logger.info(f"Loaded config from {self.config_path}")
         return config
 
-    async def create_account(self, user: EntraUser, headless: bool = False) -> Dict[str, Any]:
+    async def create_account(
+        self,
+        user: EntraUser,
+        headless: bool = False,
+        on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+    ) -> Dict[str, Any]:
         """
         Create an MMI account for the given user
 
         Args:
             user: EntraUser object with user details
             headless: Whether to run browser in headless mode
+            on_email_conflict: Async callback when email is taken.
+                Receives (display_name, attempted_email).
+                Should return new email to try, or None to skip this vendor.
 
         Returns:
             Dict with success status and messages
         """
         self.current_user = user
+        self.on_email_conflict = on_email_conflict
         logger.info(f"Starting MMI automation for {user.display_name}")
 
         result = {
@@ -80,9 +89,9 @@ class MMIAutomation:
             await self._login()
             result['messages'].append("Logged in successfully")
 
-            # Navigate to Manage Seats
-            await self._navigate_to_manage_seats()
-            result['messages'].append("Navigated to Manage Seats")
+            # Navigate to admin-team page
+            await self._navigate_to_admin_team()
+            result['messages'].append("Navigated to admin-team page")
 
             # Click Add Team Member tab
             await self._click_add_team_member()
@@ -96,8 +105,47 @@ class MMIAutomation:
             await self._set_permissions()
             result['messages'].append("Set user permissions")
 
-            # Create user
-            await self._create_user()
+            # Create user and check for duplicates
+            create_result = await self._create_user()
+
+            if create_result == 'duplicate_email':
+                # Duplicate email detected - prompt user for decision
+                if on_email_conflict:
+                    result['messages'].append(f"Email '{user_data['email']}' is already in use")
+                    new_email = await on_email_conflict(user.display_name, user_data['email'])
+
+                    if new_email is None:
+                        # User chose to skip
+                        result['success'] = False
+                        result['warnings'].append(f"Email '{user_data['email']}' already exists - User chose to skip")
+                        logger.info(f"User skipped MMI due to email conflict: {user.display_name}")
+                        return result
+                    else:
+                        # User provided alternative email - go back to form and retry
+                        logger.info(f"User provided alternate email: {new_email}")
+                        result['messages'].append(f"Trying alternate email: {new_email}")
+
+                        # Navigate back to admin-team for a fresh form
+                        await self._navigate_to_admin_team()
+                        await self._click_add_team_member()
+                        user_data['email'] = new_email
+                        await self._fill_user_details(user_data)
+                        await self._set_permissions()
+
+                        # Try again
+                        create_result = await self._create_user()
+                        if create_result != 'success':
+                            result['errors'].append(f"Alternate email '{new_email}' also failed: {create_result}")
+                            result['success'] = False
+                            return result
+                        result['messages'].append(f"Used alternate email: {new_email}")
+                else:
+                    # No callback provided - fail with error
+                    result['success'] = False
+                    result['warnings'].append(f"Email '{user_data['email']}' already exists - Account was not created")
+                    logger.info(f"Email conflict in MMI, no callback provided: {user.display_name}")
+                    return result
+
             result['messages'].append("User created successfully")
 
             result['success'] = True
@@ -152,12 +200,10 @@ class MMIAutomation:
             if len(phone) > 10:
                 phone = phone[-10:]
 
-        # NMLS - may be in employee_id or custom attribute
+        # NMLS - from extensionAttribute2 in Entra ID
         nmls = ""
-        if hasattr(user, 'employee_id') and user.employee_id:
-            # Check if employee_id looks like an NMLS number
-            if user.employee_id.isdigit():
-                nmls = user.employee_id
+        if user.nmls_number:
+            nmls = user.nmls_number
 
         return {
             'firstName': first_name,
@@ -284,9 +330,88 @@ class MMIAutomation:
         # Check for SSO/OAuth redirects
         await self._handle_sso()
 
+        # Check for MFA / Two-Factor Authentication
+        await self._handle_mfa()
+
         # Take screenshot after login
         await self.page.screenshot(path='mmi_after_login.png')
         logger.info("Login completed")
+
+    async def _handle_mfa(self):
+        """Handle Two-Factor Authentication if present on the MMI login flow"""
+        logger.info("Checking for MFA...")
+
+        page_content = await self.page.content()
+        if 'two-factor authentication' not in page_content.lower() and 'send verification code' not in page_content.lower():
+            logger.info("No MFA detected")
+            return
+
+        logger.info("MFA (Two-Factor Authentication) detected")
+        print("MFA detected - clicking Send Verification Code...")
+        await self.page.screenshot(path='mmi_mfa_page.png')
+
+        # Click "Send Verification Code" button
+        try:
+            send_btn = self.page.locator('button:has-text("Send Verification Code")')
+            await send_btn.click()
+            logger.info("Clicked Send Verification Code button")
+            print("Verification code sent via SMS - waiting for user to enter code...")
+        except Exception as e:
+            logger.warning(f"Could not click Send Verification Code: {e}")
+            print("Could not auto-click Send Verification Code - please click it manually")
+
+        await asyncio.sleep(2)
+        await self.page.screenshot(path='mmi_mfa_code_sent.png')
+
+        # Wait for user to enter the code and complete MFA
+        print("=" * 60)
+        print("MFA REQUIRED: Please complete the following steps:")
+        print("1. Check your phone for the SMS verification code")
+        print("2. Enter the code in the browser")
+        print("3. Click Verify / Submit to complete login")
+        print("=" * 60)
+
+        # Poll until MFA page is gone (user completed it)
+        max_wait_time = 600  # 10 minutes
+        check_interval = 3
+        elapsed_time = 0
+
+        while elapsed_time < max_wait_time:
+            await asyncio.sleep(check_interval)
+            elapsed_time += check_interval
+
+            # Primary check: if URL has changed from login page, MFA is done
+            current_url = self.page.url.lower()
+            if '/login' not in current_url and 'verify' not in current_url:
+                logger.info(f"MFA completed - URL changed to: {self.page.url}")
+                print("MFA completed - continuing automation")
+                await asyncio.sleep(2)
+                return
+
+            # Secondary check: look for MFA-specific visible text
+            try:
+                page_text = await self.page.inner_text('body')
+                page_text = page_text.lower()
+            except:
+                page_text = ''
+
+            mfa_still_present = (
+                'two-factor authentication' in page_text
+                or 'verify my account' in page_text
+                or 'enter the six-digit code' in page_text
+            )
+
+            if not mfa_still_present and page_text:
+                logger.info("MFA completed - MFA text no longer visible")
+                print("MFA completed - continuing automation")
+                await asyncio.sleep(2)
+                return
+
+            if elapsed_time % 30 == 0:
+                print(f"Still waiting for MFA completion... ({elapsed_time}s elapsed)")
+                await self.page.screenshot(path=f'mmi_mfa_wait_{elapsed_time}s.png')
+
+        raise Exception("MFA timeout - authentication not completed within 10 minutes")
 
     async def _handle_sso(self):
         """Handle SSO/OAuth authentication if redirected"""
@@ -330,113 +455,39 @@ class MMIAutomation:
 
         logger.info("No SSO redirect detected")
 
-    async def _navigate_to_manage_seats(self):
-        """Navigate to Manage Seats from hamburger menu"""
-        logger.info("Navigating to Manage Seats...")
-        print("Navigating to Manage Seats...")
+    async def _navigate_to_admin_team(self):
+        """Navigate directly to admin-team page"""
+        logger.info("Navigating to admin-team page...")
+        print("Navigating to admin-team page...")
 
-        # Take screenshot of current page
-        await self.page.screenshot(path='mmi_before_manage_seats.png')
-
-        # Wait for page to be fully loaded
-        await asyncio.sleep(2)
-
-        # First, check if "Manage Seats" is already visible (might be in sidebar)
-        manage_seats_visible = False
-        try:
-            element = await self.page.query_selector('text="Manage Seats"')
-            if element and await element.is_visible():
-                manage_seats_visible = True
-        except:
-            pass
-
-        if not manage_seats_visible:
-            # Click hamburger menu if needed (the menu icon)
-            hamburger_selectors = [
-                'button[aria-label="menu"]',
-                'button[aria-label="Menu"]',
-                '[class*="hamburger"]',
-                '[class*="menu-toggle"]',
-                'button:has([class*="menu"])',
-                'svg[class*="menu"]'
-            ]
-
-            for selector in hamburger_selectors:
-                try:
-                    element = await self.page.query_selector(selector)
-                    if element and await element.is_visible():
-                        await element.click()
-                        logger.info(f"Clicked hamburger menu with selector: {selector}")
-                        await asyncio.sleep(1)
-                        break
-                except:
-                    continue
-
-        # Take screenshot after opening menu
-        await self.page.screenshot(path='mmi_menu_open.png')
-
-        # Click "Manage Seats" in the menu
-        manage_seats_clicked = False
-        manage_seats_selectors = [
-            'text="Manage Seats"',
-            'a:has-text("Manage Seats")',
-            '[href*="manage"]',
-            'span:has-text("Manage Seats")',
-            'div:has-text("Manage Seats")'
-        ]
-
-        for selector in manage_seats_selectors:
-            try:
-                element = await self.page.query_selector(selector)
-                if element and await element.is_visible():
-                    await element.click()
-                    manage_seats_clicked = True
-                    logger.info(f"Clicked Manage Seats with selector: {selector}")
-                    break
-            except:
-                continue
-
-        if not manage_seats_clicked:
-            # Try using locator
-            try:
-                await self.page.locator('text="Manage Seats"').click()
-                manage_seats_clicked = True
-            except:
-                pass
-
-        if not manage_seats_clicked:
-            await self.page.screenshot(path='mmi_manage_seats_not_found.png')
-            raise Exception("Could not find Manage Seats menu item")
+        await self.page.goto('https://new.mmi.run/admin-team')
 
         # Wait for page to load
         try:
-            await self.page.wait_for_load_state('networkidle', timeout=10000)
+            await self.page.wait_for_load_state('networkidle', timeout=15000)
         except:
             pass
         await asyncio.sleep(2)
 
         # Take screenshot
-        await self.page.screenshot(path='mmi_manage_seats_page.png')
-        logger.info("Navigated to Manage Seats")
+        await self.page.screenshot(path='mmi_admin_team_page.png')
+        logger.info("Navigated to admin-team page")
 
     async def _click_add_team_member(self):
-        """Click Add Team Member tab/button"""
+        """Click Add Team Member tab/button on the admin-team page"""
         logger.info("Clicking Add Team Member...")
         print("Clicking Add Team Member...")
 
         await asyncio.sleep(1)
-
-        # Take screenshot
         await self.page.screenshot(path='mmi_before_add_member.png')
 
-        # Click "Add Team Member" tab or button
+        # Look for the "Add Team Member" tab or link on the admin-team page
         add_member_clicked = False
         add_member_selectors = [
-            'text="Add Team Member"',
-            'button:has-text("Add Team Member")',
             '[role="tab"]:has-text("Add Team Member")',
             'a:has-text("Add Team Member")',
-            'div:has-text("Add Team Member")'
+            'button:has-text("Add Team Member")',
+            'text="Add Team Member"',
         ]
 
         for selector in add_member_selectors:
@@ -451,25 +502,32 @@ class MMIAutomation:
                 continue
 
         if not add_member_clicked:
-            # Try using locator
+            # The admin-team page may already show the form
+            # Check if form fields are visible
+            form_visible = False
             try:
-                await self.page.locator('text="Add Team Member"').click()
-                add_member_clicked = True
+                first_name = await self.page.query_selector('input[placeholder*="First" i]')
+                if first_name and await first_name.is_visible():
+                    form_visible = True
             except:
                 pass
 
-        if not add_member_clicked:
-            await self.page.screenshot(path='mmi_add_member_not_found.png')
-            raise Exception("Could not find Add Team Member tab/button")
+            if not form_visible:
+                try:
+                    first_name = await self.page.query_selector('input[name*="first" i]')
+                    if first_name and await first_name.is_visible():
+                        form_visible = True
+                except:
+                    pass
+
+            if form_visible:
+                logger.info("Add Team Member form already visible")
+            else:
+                await self.page.screenshot(path='mmi_add_member_not_found.png')
+                raise Exception("Could not find Add Team Member tab/button or form")
 
         # Wait for form to appear
-        try:
-            await self.page.wait_for_load_state('networkidle', timeout=10000)
-        except:
-            pass
         await asyncio.sleep(1)
-
-        # Take screenshot
         await self.page.screenshot(path='mmi_add_member_form.png')
         logger.info("Add Team Member form opened")
 
@@ -614,68 +672,138 @@ class MMIAutomation:
         await self.page.screenshot(path='mmi_form_filled.png')
         logger.info("User details filled")
 
+    def _determine_permissions(self) -> list:
+        """
+        Determine which permissions to assign based on user's job title.
+
+        Per MMI User Setup Guide:
+        - All users get base Loan Officer permissions
+        - Branch Managers, Executives, Recruiters also get Company Wallet Share
+        - Executives, Recruiters also get Wholesale Insights
+        """
+        permissions_config = self.config.get('permissions', {})
+
+        # Start with base permissions for all users
+        base_permissions = permissions_config.get('loan_officer_default', [
+            "Agent Tracking Alerts",
+            "Builder Research",
+            "Loan Officer Tools",
+            "Manual Property Monitoring",
+            "Past Property Tracking Alerts",
+            "Property/County research",
+            "Title Explorer",
+            "View LO Contact Details"
+        ])
+        permissions = list(base_permissions)
+
+        # Check user's title for elevated access
+        job_title = (self.current_user.job_title or '').lower()
+        logger.info(f"Determining permissions for job title: '{self.current_user.job_title}'")
+
+        # Title keywords indicating branch manager level or above
+        is_branch_manager = any(kw in job_title for kw in [
+            'branch manager', 'area manager', 'regional manager',
+            'division manager', 'production manager'
+        ])
+
+        # Title keywords indicating executive or recruiter level
+        is_executive = any(kw in job_title for kw in [
+            'executive', 'evp', 'svp', 'vp', 'vice president',
+            'president', 'ceo', 'cfo', 'coo', 'chief',
+            'director', 'recruiter', 'recruiting'
+        ])
+
+        # Branch Managers and above get Company Wallet Share
+        if is_branch_manager or is_executive:
+            additional = permissions_config.get('branch_manager_additional', ['Company Wallet Share'])
+            for perm in additional:
+                if perm not in permissions:
+                    permissions.append(perm)
+            logger.info("Added Branch Manager permissions (Company Wallet Share)")
+
+        # Executives and Recruiters also get Wholesale Insights
+        if is_executive:
+            additional = permissions_config.get('executive_additional', ['Wholesale Insights'])
+            for perm in additional:
+                if perm not in permissions:
+                    permissions.append(perm)
+            logger.info("Added Executive permissions (Wholesale Insights)")
+
+        logger.info(f"Final permissions list ({len(permissions)}): {permissions}")
+        return permissions
+
     async def _set_permissions(self):
-        """Set user permissions (checkboxes)"""
+        """Set user permissions (checkboxes) based on role"""
         logger.info("Setting permissions...")
 
-        # Get default permissions from config
-        default_permissions = self.config.get('permissions', {}).get('loan_officer_default', [])
-
-        if not default_permissions:
-            # Use hardcoded defaults if not in config
-            default_permissions = [
-                "Agent Tracking Alerts",
-                "Builder Research",
-                "Loan Officer Tools",
-                "Manual Property Monitoring",
-                "Past Property Tracking Alerts",
-                "Property/County research",
-                "Title Explorer",
-                "View LO Contact Details"
-            ]
+        permissions = self._determine_permissions()
 
         # Check each permission checkbox
-        for permission in default_permissions:
+        for permission in permissions:
+            checked = False
+
+            # Try checkbox inside label
             try:
-                # Try clicking by label text
                 checkbox = self.page.locator(f'label:has-text("{permission}") input[type="checkbox"]')
                 if await checkbox.count() > 0:
-                    # Check if not already checked
                     is_checked = await checkbox.is_checked()
                     if not is_checked:
                         await checkbox.check()
                         logger.info(f"Checked permission: {permission}")
-                    continue
+                    else:
+                        logger.info(f"Permission already checked: {permission}")
+                    checked = True
             except:
                 pass
 
-            try:
-                # Alternative: click the label itself
-                label = self.page.locator(f'text="{permission}"')
-                if await label.count() > 0:
-                    await label.click()
-                    logger.info(f"Clicked permission label: {permission}")
-            except:
+            # Try checkbox next to text
+            if not checked:
+                try:
+                    checkbox = self.page.locator(f'input[type="checkbox"]').locator(f'xpath=..//*[contains(text(), "{permission}")]/..')
+                    if await checkbox.count() > 0:
+                        await checkbox.locator('input[type="checkbox"]').first.check()
+                        logger.info(f"Checked permission via sibling: {permission}")
+                        checked = True
+                except:
+                    pass
+
+            # Try clicking the label text directly (some UIs toggle on label click)
+            if not checked:
+                try:
+                    label = self.page.locator(f'text="{permission}"')
+                    if await label.count() > 0:
+                        await label.first.click()
+                        logger.info(f"Clicked permission label: {permission}")
+                        checked = True
+                except:
+                    pass
+
+            if not checked:
                 logger.warning(f"Could not find permission checkbox: {permission}")
 
         # Take screenshot of permissions
         await self.page.screenshot(path='mmi_permissions_set.png')
         logger.info("Permissions set")
 
-    async def _create_user(self):
-        """Click Create button to finalize user creation"""
+    async def _create_user(self) -> str:
+        """
+        Click Create button to finalize user creation and check for errors
+
+        Returns:
+            'success' if user created
+            'duplicate_email' if email/user already exists
+        """
         logger.info("Creating user...")
 
         # Take screenshot before creating
         await self.page.screenshot(path='mmi_before_create.png')
 
-        # Click Create button
+        # Click Create button - matches: <button class="button button-primary button-md" type="submit">Create</button>
         create_clicked = False
         create_selectors = [
-            'button:has-text("Create")',
-            'input[type="submit"][value*="Create" i]',
+            'button.button.button-primary[type="submit"]',
             'button[type="submit"]:has-text("Create")',
-            'text="Create"'
+            'button:has-text("Create")',
         ]
 
         for selector in create_selectors:
@@ -688,14 +816,6 @@ class MMIAutomation:
                     break
             except:
                 continue
-
-        if not create_clicked:
-            # Try using locator
-            try:
-                await self.page.locator('button:has-text("Create")').click()
-                create_clicked = True
-            except:
-                pass
 
         if not create_clicked:
             await self.page.screenshot(path='mmi_create_not_found.png')
@@ -711,16 +831,54 @@ class MMIAutomation:
         # Take screenshot of result
         await self.page.screenshot(path='mmi_user_created.png')
 
-        # Check for success indicators
+        # Check for duplicate/error messages
         page_content = await self.page.content()
-        success_indicators = ['success', 'created', 'added', 'welcome']
-        error_indicators = ['error', 'failed', 'already exists', 'duplicate']
+        page_text = page_content.lower()
 
-        for indicator in error_indicators:
-            if indicator.lower() in page_content.lower():
+        # Check for "already exists" or "duplicate" indicators
+        if 'already exists' in page_text or 'duplicate' in page_text:
+            logger.warning("Duplicate user/email detected")
+            await self.page.screenshot(path='mmi_duplicate_detected.png')
+            return 'duplicate_email'
+
+        # Check for email-specific errors
+        if 'email' in page_text and ('in use' in page_text or 'taken' in page_text or 'registered' in page_text):
+            logger.warning("Email already in use detected")
+            await self.page.screenshot(path='mmi_email_in_use.png')
+            return 'duplicate_email'
+
+        # Check for any visible error message elements
+        error_selectors = [
+            '.error', '.alert-danger', '.alert-error', '[class*="error"]',
+            '.validation-error', '.field-error', '[role="alert"]',
+            '.toast-error', '.notification-error', '[class*="toast"]',
+            '#snackbar.error', '#snackbar'
+        ]
+        for selector in error_selectors:
+            try:
+                error_elements = await self.page.query_selector_all(selector)
+                for elem in error_elements:
+                    if elem and await elem.is_visible():
+                        error_text = await elem.text_content()
+                        if error_text:
+                            error_text_lower = error_text.lower().strip()
+                            if 'already' in error_text_lower or 'exists' in error_text_lower or 'duplicate' in error_text_lower or 'in use' in error_text_lower:
+                                logger.warning(f"Error element detected: {error_text}")
+                                await self.page.screenshot(path='mmi_error_element.png')
+                                return 'duplicate_email'
+            except:
+                continue
+
+        # Check for generic failure indicators (not duplicate-specific)
+        generic_error_indicators = ['error', 'failed']
+        for indicator in generic_error_indicators:
+            if indicator in page_text:
+                # Only raise if it's a non-duplicate error
+                logger.warning(f"Generic error indicator found: '{indicator}'")
                 raise Exception(f"User creation may have failed: found '{indicator}' in page")
 
         logger.info("User created successfully")
+        return 'success'
 
     async def _cleanup(self):
         """Clean up browser resources"""
@@ -732,13 +890,22 @@ class MMIAutomation:
         logger.info("Browser closed")
 
 
-async def provision_user(user: EntraUser, config_path: str) -> Dict[str, Any]:
+async def provision_user(
+    user: EntraUser,
+    config_path: str,
+    api_key: Optional[str] = None,
+    on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+) -> Dict[str, Any]:
     """
     Main entry point for MMI user provisioning
 
     Args:
         user: EntraUser object
         config_path: Path to vendor config JSON
+        api_key: Optional API key (not used for MMI)
+        on_email_conflict: Async callback when email is taken.
+            Receives (display_name, attempted_email).
+            Should return new email to try, or None to skip this vendor.
 
     Returns:
         Dict with provisioning result
@@ -751,7 +918,11 @@ async def provision_user(user: EntraUser, config_path: str) -> Dict[str, Any]:
     # Create automation instance
     automation = MMIAutomation(config_path, keyvault)
 
-    # Run automation
-    result = await automation.create_account(user, headless=False)
+    # Run automation with callback
+    result = await automation.create_account(
+        user,
+        headless=False,
+        on_email_conflict=on_email_conflict
+    )
 
     return result
