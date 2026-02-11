@@ -1,312 +1,349 @@
 # Azure Key Vault Setup Guide
 
-This guide explains how to set up Azure Key Vault for the Nexus application to securely store and retrieve vendor credentials.
+This guide covers provisioning and configuring Azure Key Vault for Nexus. All vendor admin credentials (login URLs, usernames, passwords) are stored in Key Vault and retrieved at runtime using the signed-in user's Microsoft identity.
 
-## Overview
+## Table of Contents
 
-Nexus uses Azure Key Vault to:
-- **Eliminate plaintext passwords** from config files
-- **Centralize credential management** in Azure
-- **Leverage Azure AD authentication** for secure access
-- **Enable credential rotation** without code changes
-- **Provide audit trails** for credential access
+- [How Nexus Authenticates](#how-nexus-authenticates)
+- [Prerequisites](#prerequisites)
+- [Step 1: Create the Key Vault](#step-1-create-the-key-vault)
+- [Step 2: Grant User Access](#step-2-grant-user-access)
+- [Step 3: Add Vendor Secrets](#step-3-add-vendor-secrets)
+- [Step 4: Configure Nexus](#step-4-configure-nexus)
+- [Step 5: Verify Setup](#step-5-verify-setup)
+- [Complete Secret Reference](#complete-secret-reference)
+- [Troubleshooting](#troubleshooting)
+- [Security Best Practices](#security-best-practices)
+
+## How Nexus Authenticates
+
+Nexus uses **delegated permissions** — no service principals or stored client secrets.
+
+```
+User signs in via Microsoft (MSAL)
+        │
+        ▼
+┌─────────────────┐
+│  MSAL Token     │──► Microsoft Graph API (user lookup, groups)
+│  (delegated)    │
+│                 │──► Azure Key Vault (vendor credentials)
+│                 │    via MSALCredentialAdapter
+└─────────────────┘
+```
+
+1. The user signs in through a Microsoft browser authentication prompt
+2. MSAL acquires a token with delegated scopes
+3. An `MSALCredentialAdapter` bridges the MSAL token to the Azure SDK credential interface
+4. The `KeyVaultService` uses that credential to call Key Vault as the signed-in user
+
+This means **each user who runs Nexus must have Key Vault access** — there is no shared service account.
 
 ## Prerequisites
 
-1. **Azure Subscription** with permissions to create Key Vault
-2. **Azure CLI** installed ([Download](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli))
-3. **Appropriate Azure AD permissions** (or use service principal)
+- **Azure subscription** with permissions to create a Key Vault
+- **Azure AD App Registration** with delegated permissions (see [AUTHENTICATION_GUIDE.md](AUTHENTICATION_GUIDE.md))
+- **Azure CLI** installed ([download](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli)) — used for initial setup only
 
-## Step 1: Create Azure Key Vault
+## Step 1: Create the Key Vault
 
-### Option A: Using Azure Portal
+### Option A: Azure Portal
 
-1. Navigate to [Azure Portal](https://portal.azure.com)
-2. Click **Create a resource** → Search for "Key Vault"
-3. Click **Create**
-4. Fill in the details:
+1. Navigate to [portal.azure.com](https://portal.azure.com)
+2. **Create a resource** > search for **Key Vault** > **Create**
+3. Configure:
    - **Subscription**: Your Azure subscription
    - **Resource Group**: Create new or select existing
-   - **Key Vault Name**: `nexus-credentials` (must be globally unique)
+   - **Key Vault Name**: Must be globally unique (e.g., `hrm-nexus-credentials`)
    - **Region**: Select your region
    - **Pricing Tier**: Standard
-5. Click **Review + Create** → **Create**
+   - **Permission model**: Azure role-based access control (RBAC)
+4. Click **Review + Create** > **Create**
 
-### Option B: Using Azure CLI
+### Option B: Azure CLI
 
 ```bash
-# Login to Azure
 az login
 
-# Set variables
 RESOURCE_GROUP="nexus-rg"
-VAULT_NAME="nexus-credentials"  # Must be globally unique
+VAULT_NAME="hrm-nexus-credentials"   # must be globally unique
 LOCATION="eastus"
 
 # Create resource group (if needed)
 az group create --name $RESOURCE_GROUP --location $LOCATION
 
-# Create Key Vault
+# Create Key Vault with RBAC authorization
 az keyvault create \
   --name $VAULT_NAME \
   --resource-group $RESOURCE_GROUP \
   --location $LOCATION \
-  --enabled-for-deployment true \
-  --enabled-for-template-deployment true
+  --enable-rbac-authorization true
 ```
 
-## Step 2: Add Vendor Credentials to Key Vault
+## Step 2: Grant User Access
 
-### AccountChek Secrets
+Every user who runs Nexus needs the **Key Vault Secrets User** role on the vault. This grants read-only access to secret values.
 
-```bash
-# Set your Key Vault name
-VAULT_NAME="nexus-credentials"
-
-# Add AccountChek secrets
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "accountchek-login-url" \
-  --value "https://verifier.accountchek.com/login"
-
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "accountchek-login-email" \
-  --value "your-admin@email.com"
-
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "accountchek-login-password" \
-  --value "YourSecurePassword123!"
-
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "accountchek-newuser-password" \
-  --value "Welcome@123"
-```
-
-### Secret Naming Convention
-
-All secrets follow the pattern: `{vendor-name}-{credential-type}`
-
-Examples:
-- `accountchek-login-url`
-- `accountchek-login-email`
-- `accountchek-login-password`
-- `accountchek-newuser-password`
-
-## Step 3: Configure Access Permissions
-
-### Option A: Using Access Policy (Classic)
+### Grant access to a single user
 
 ```bash
-# Grant your user account access
-USER_PRINCIPAL_NAME="user@yourcompany.com"
+VAULT_NAME="hrm-nexus-credentials"
 
-az keyvault set-policy \
-  --name $VAULT_NAME \
-  --upn $USER_PRINCIPAL_NAME \
-  --secret-permissions get list
-```
-
-### Option B: Using RBAC (Recommended)
-
-```bash
-# Enable RBAC on Key Vault
-az keyvault update --name $VAULT_NAME --enable-rbac-authorization true
-
-# Get your user object ID
-USER_OBJECT_ID=$(az ad signed-in-user show --query id -o tsv)
-
-# Get Key Vault resource ID
+# Get the Key Vault resource ID
 VAULT_ID=$(az keyvault show --name $VAULT_NAME --query id -o tsv)
 
-# Assign "Key Vault Secrets User" role
+# Get the user's object ID
+USER_ID=$(az ad user show --id "user@yourcompany.com" --query id -o tsv)
+
+# Assign the role
 az role assignment create \
-  --assignee $USER_OBJECT_ID \
+  --assignee $USER_ID \
   --role "Key Vault Secrets User" \
   --scope $VAULT_ID
 ```
 
-## Step 4: Configure Nexus Application
+### Grant access to an Azure AD group (recommended)
 
-### Set Environment Variable
-
-**Windows (PowerShell):**
-```powershell
-# Set for current session
-$env:AZURE_KEYVAULT_URL = "https://nexus-credentials.vault.azure.net/"
-
-# Set permanently (user-level)
-[System.Environment]::SetEnvironmentVariable("AZURE_KEYVAULT_URL", "https://nexus-credentials.vault.azure.net/", "User")
-
-# Set permanently (system-level - requires admin)
-[System.Environment]::SetEnvironmentVariable("AZURE_KEYVAULT_URL", "https://nexus-credentials.vault.azure.net/", "Machine")
-```
-
-**Windows (Command Prompt):**
-```cmd
-set AZURE_KEYVAULT_URL=https://nexus-credentials.vault.azure.net/
-```
-
-**Linux/Mac:**
-```bash
-export AZURE_KEYVAULT_URL=https://nexus-credentials.vault.azure.net/
-
-# Add to ~/.bashrc or ~/.zshrc for persistence
-echo 'export AZURE_KEYVAULT_URL=https://nexus-credentials.vault.azure.net/' >> ~/.bashrc
-```
-
-## Step 5: Authenticate to Azure
-
-Nexus supports multiple authentication methods:
-
-### 1. Azure CLI (Recommended for Development)
+For easier management, create a security group (e.g., `Nexus_Users`) and assign the role to the group:
 
 ```bash
-az login
+GROUP_ID=$(az ad group show --group "Nexus_Users" --query id -o tsv)
+
+az role assignment create \
+  --assignee $GROUP_ID \
+  --role "Key Vault Secrets User" \
+  --scope $VAULT_ID
 ```
 
-This is the easiest method for local development. Nexus will automatically use your Azure CLI credentials.
+Then add users to the `Nexus_Users` group in Entra ID as needed.
 
-### 2. Managed Identity (Recommended for Production)
+### Grant admin access (for managing secrets)
 
-When running on Azure VMs, App Services, or Azure Functions:
-- Enable System-Assigned Managed Identity on the resource
-- Grant the managed identity access to the Key Vault
-- No code changes needed - authentication is automatic
-
-### 3. Service Principal (CI/CD Pipelines)
+The IT admin who adds/updates vendor credentials needs the **Key Vault Secrets Officer** role:
 
 ```bash
-# Create service principal
-SP_OUTPUT=$(az ad sp create-for-rbac --name "nexus-sp" --skip-assignment)
+ADMIN_ID=$(az ad user show --id "admin@yourcompany.com" --query id -o tsv)
 
-# Extract credentials
-CLIENT_ID=$(echo $SP_OUTPUT | jq -r '.appId')
-CLIENT_SECRET=$(echo $SP_OUTPUT | jq -r '.password')
-TENANT_ID=$(echo $SP_OUTPUT | jq -r '.tenant')
-
-# Grant access to Key Vault
-az keyvault set-policy \
-  --name $VAULT_NAME \
-  --spn $CLIENT_ID \
-  --secret-permissions get list
-
-# Set environment variables
-export AZURE_CLIENT_ID=$CLIENT_ID
-export AZURE_CLIENT_SECRET=$CLIENT_SECRET
-export AZURE_TENANT_ID=$TENANT_ID
+az role assignment create \
+  --assignee $ADMIN_ID \
+  --role "Key Vault Secrets Officer" \
+  --scope $VAULT_ID
 ```
 
-## Step 6: Verify Setup
+## Step 3: Add Vendor Secrets
 
-### Test Key Vault Connection
+All secrets follow the naming convention: `{vendorname}-{credential-type}`
 
-```python
-# Test script
-from services.keyvault_service import get_keyvault_service
+Secret names may only contain alphanumeric characters and hyphens.
 
-try:
-    kv = get_keyvault_service()
-    print(f"✓ Connected to: {kv.vault_url}")
+### Add secrets via Azure CLI
 
-    # Test getting a secret
-    secret = kv.get_secret("accountchek-login-url")
-    print(f"✓ Retrieved secret: accountchek-login-url")
+```bash
+VAULT_NAME="hrm-nexus-credentials"
 
-    # Get status
-    status = kv.get_status()
-    print(f"✓ Auth method: {status['auth_method']}")
-    print(f"✓ Cached secrets: {status['cached_secrets']}")
-
-except Exception as e:
-    print(f"✗ Error: {e}")
+# Example: AccountChek
+az keyvault secret set --vault-name $VAULT_NAME --name "accountchek-login-url"       --value "https://verifier.accountchek.com/login"
+az keyvault secret set --vault-name $VAULT_NAME --name "accountchek-login-email"      --value "admin@yourcompany.com"
+az keyvault secret set --vault-name $VAULT_NAME --name "accountchek-login-password"   --value "<password>"
+az keyvault secret set --vault-name $VAULT_NAME --name "accountchek-newuser-password"  --value "<default-password>"
 ```
 
-### Check Logs
+Repeat for each vendor. See [Complete Secret Reference](#complete-secret-reference) below for the full list.
 
-After running Nexus, check the logs for Key Vault initialization:
+### Add secrets via Azure Portal
 
+1. Navigate to your Key Vault in the Azure Portal
+2. Click **Secrets** in the left menu
+3. Click **+ Generate/Import**
+4. Enter the secret **Name** and **Value**
+5. Click **Create**
+
+## Step 4: Configure Nexus
+
+The Key Vault URL is set in the application configuration file.
+
+1. Copy the example config if you haven't already:
+
+```bash
+cp config/app_config.example.json config/app_config.json
 ```
-%APPDATA%\Nexus\logs\nexus_YYYYMMDD.log
+
+2. Set the `vault_url` in `config/app_config.json`:
+
+```json
+{
+  "azure_keyvault": {
+    "vault_url": "https://hrm-nexus-credentials.vault.azure.net/",
+    "secret_naming_convention": "{vendor}-{field}"
+  }
+}
 ```
 
-Look for:
-- `✓ KeyVaultService initialized and connected to https://...`
-- `Using Azure CLI authentication for Key Vault`
+> **Fallback**: If `vault_url` is not set in the config, the `KeyVaultService` will check for the `AZURE_KEYVAULT_URL` environment variable.
+
+## Step 5: Verify Setup
+
+1. Launch Nexus:
+   ```bash
+   python main.py
+   ```
+2. Sign in with your Microsoft account
+3. Search for a test user and start a provisioning run
+4. Check the logs for Key Vault initialization messages:
+   ```
+   ✓ KeyVaultService initialized for https://hrm-nexus-credentials.vault.azure.net/
+   ✓ Retrieved secret 'accountchek-login-url' from Key Vault
+   ```
+
+Log files are located at `%APPDATA%\Nexus\logs\nexus_YYYYMMDD.log`.
+
+## Complete Secret Reference
+
+Below is the full inventory of Key Vault secrets required for each vendor.
+
+### AccountChek
+
+| Secret Name | Description |
+|---|---|
+| `accountchek-login-url` | Admin portal login URL |
+| `accountchek-login-email` | Admin login email |
+| `accountchek-login-password` | Admin login password |
+| `accountchek-newuser-password` | Default password for new users |
+
+### BankVOD
+
+| Secret Name | Description |
+|---|---|
+| `bankvod-login-url` | Admin portal login URL |
+| `bankvod-login-account-id` | Account identifier |
+| `bankvod-login-email` | Admin login email |
+| `bankvod-login-password` | Admin login password |
+| `bankvod-newuser-password` | Default password for new users |
+
+### Certified Credit
+
+| Secret Name | Description |
+|---|---|
+| `certifiedcredit-login-url` | Admin portal login URL |
+| `certifiedcredit-admin-username` | Admin login username |
+| `certifiedcredit-admin-password` | Admin login password |
+| `certifiedcredit-default-password` | Default password for new users |
+
+### Clear Capital
+
+| Secret Name | Description |
+|---|---|
+| `clearcapital-login-url` | Admin portal login URL |
+| `clearcapital-admin-username` | Admin login username |
+| `clearcapital-admin-password` | Admin login password |
+
+### DataVerify
+
+| Secret Name | Description |
+|---|---|
+| `dataverify-login-url` | Admin portal login URL |
+| `dataverify-admin-username` | Admin login username |
+| `dataverify-admin-password` | Admin login password |
+
+### MMI
+
+| Secret Name | Description |
+|---|---|
+| `mmi-login-url` | Admin portal login URL |
+| `mmi-admin-username` | Admin login username |
+| `mmi-admin-password` | Admin login password |
+
+### Partners Credit
+
+| Secret Name | Description |
+|---|---|
+| `partnerscredit-login-url` | Admin portal login URL |
+| `partnerscredit-admin-username` | Admin login username |
+| `partnerscredit-admin-password` | Admin login password |
+
+### The Work Number (Equifax)
+
+| Secret Name | Description |
+|---|---|
+| `theworknumber-login-url` | Admin portal login URL |
+| `theworknumber-admin-username` | Admin login username |
+| `theworknumber-admin-password` | Admin login password |
+
+### Experience.com
+
+| Secret Name | Description |
+|---|---|
+| `experience-login-url` | Admin portal login URL |
+| `experience-admin-email` | Admin login email |
+| `experience-admin-password` | Admin login password |
+
+### Summary
+
+| Vendor | Secrets | Notes |
+|---|---|---|
+| AccountChek | 4 | Uses `login-email`; has `newuser-password` |
+| BankVOD | 5 | Has unique `login-account-id` field |
+| Certified Credit | 4 | Uses `admin-username`; has `default-password` |
+| Clear Capital | 3 | Standard |
+| DataVerify | 3 | Standard |
+| MMI | 3 | Standard |
+| Partners Credit | 3 | Standard |
+| The Work Number | 3 | Standard |
+| Experience.com | 3 | Uses `admin-email`; currently disabled |
+| **Total** | **31** | |
 
 ## Troubleshooting
 
-### Error: "AZURE_KEYVAULT_URL not configured"
+### "Azure Key Vault URL not configured"
 
-**Solution**: Set the environment variable:
+The `vault_url` is missing from both `config/app_config.json` and the `AZURE_KEYVAULT_URL` environment variable.
+
+**Fix**: Set the URL in `config/app_config.json` under `azure_keyvault.vault_url`.
+
+### "Invalid issuer" (AKV10032)
+
+Your Azure account's tenant does not match the Key Vault's tenant.
+
+**Fix**: Ensure the Key Vault is in the same Azure tenant as the Nexus App Registration. Check `microsoft.tenant_id` in `config/app_config.json`.
+
+### "403 Forbidden" / "Access Denied"
+
+The signed-in user does not have permission to read secrets.
+
+**Fix**: Grant the user (or their group) the **Key Vault Secrets User** RBAC role. See [Step 2](#step-2-grant-user-access).
+
+### "Secret not found"
+
+The requested secret name does not exist in the vault.
+
+**Fix**: Verify the secret exists:
 ```bash
-export AZURE_KEYVAULT_URL=https://your-vault.vault.azure.net/
+az keyvault secret list --vault-name $VAULT_NAME --query "[].name" -o tsv
 ```
 
-### Error: "Permission denied" or "403 Forbidden"
+Compare against the [Complete Secret Reference](#complete-secret-reference) above.
 
-**Solution**: Grant your user access to the Key Vault:
-```bash
-az keyvault set-policy --name $VAULT_NAME --upn user@company.com --secret-permissions get list
-```
+### Authentication prompt not appearing
 
-### Error: "Azure CLI authentication failed"
+MSAL may have a cached token. Close Nexus, clear the MSAL token cache, and relaunch.
 
-**Solution**: Login to Azure CLI:
-```bash
-az login
-az account show  # Verify you're logged in
-```
-
-### Error: "Secret not found"
-
-**Solution**: Verify secret exists and name is correct:
-```bash
-az keyvault secret list --vault-name $VAULT_NAME --query "[].name"
-```
+The MSAL cache is stored in `%APPDATA%\Nexus\` or the system token broker (WAM) on Windows.
 
 ## Security Best Practices
 
-1. **Use RBAC** instead of Access Policies for better granular control
-2. **Enable soft-delete** and purge protection on Key Vault
-3. **Rotate credentials regularly** using Key Vault secret versions
-4. **Monitor access** using Azure Monitor and Log Analytics
-5. **Use Managed Identity** in production (no stored credentials)
-6. **Restrict network access** using Key Vault firewalls
-7. **Enable audit logging** to track secret access
-
-## Adding New Vendors
-
-When adding a new vendor, follow this pattern:
-
-```bash
-# Example: Adding "VendorX" credentials
-VAULT_NAME="nexus-credentials"
-
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "vendorx-login-url" \
-  --value "https://vendorx.com/login"
-
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "vendorx-login-email" \
-  --value "admin@company.com"
-
-az keyvault secret set --vault-name $VAULT_NAME \
-  --name "vendorx-login-password" \
-  --value "SecurePassword123!"
-```
-
-## Next Steps
-
-1. ✓ Create Azure Key Vault
-2. ✓ Add vendor secrets
-3. ✓ Configure access permissions
-4. ✓ Set AZURE_KEYVAULT_URL environment variable
-5. ✓ Authenticate to Azure (az login)
-6. ✓ Run Nexus and verify logs
-7. ✓ Test automation with real credentials
+| Practice | Detail |
+|---|---|
+| **Use RBAC** | Prefer Azure RBAC over legacy Access Policies for granular, auditable control |
+| **Least privilege** | Grant **Secrets User** (read-only) to operators; **Secrets Officer** only to admins who manage credentials |
+| **Group-based access** | Assign roles to an Entra ID group rather than individual users |
+| **Enable soft-delete** | Protects against accidental deletion (enabled by default on new vaults) |
+| **Enable purge protection** | Prevents permanent deletion during the retention period |
+| **Rotate credentials** | Use Key Vault secret versioning to rotate vendor passwords without downtime |
+| **Audit logging** | Enable Azure Monitor diagnostic settings to track all secret access |
+| **Network restrictions** | Consider Key Vault firewall rules if your network topology supports it |
 
 ## Additional Resources
 
-- [Azure Key Vault Documentation](https://learn.microsoft.com/en-us/azure/key-vault/)
-- [Azure CLI Reference](https://learn.microsoft.com/en-us/cli/azure/keyvault)
-- [Python Azure SDK](https://learn.microsoft.com/en-us/python/api/overview/azure/keyvault-secrets-readme)
-- [Managed Identity Overview](https://learn.microsoft.com/en-us/entra/identity/managed-identities-azure-resources/overview)
+- [Azure Key Vault documentation](https://learn.microsoft.com/en-us/azure/key-vault/)
+- [Azure RBAC for Key Vault](https://learn.microsoft.com/en-us/azure/key-vault/general/rbac-guide)
+- [MSAL for Python](https://learn.microsoft.com/en-us/entra/msal/python/)
+- [Nexus Authentication Guide](AUTHENTICATION_GUIDE.md)
