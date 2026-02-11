@@ -185,6 +185,8 @@ The install script sets a machine-wide `PLAYWRIGHT_BROWSERS_PATH` environment va
 
 ## Usage
 
+For a detailed walkthrough, see the [User Guide](docs/USER_GUIDE.md).
+
 ### Workflow
 
 1. **Sign In** — Authenticate with your Microsoft account
@@ -271,15 +273,18 @@ Nexus/
 │   ├── user.py                        # EntraUser model
 │   ├── vendor.py                      # Vendor configuration model
 │   └── automation_result.py           # Provisioning result model
-├── Vendors/                           # Per-vendor configuration and docs
+├── VENDOR_ONBOARDING_TEMPLATE.md      # Template for documenting new vendor workflows
+├── vendors/                           # Per-vendor configuration and docs
 │   ├── {VendorName}/
 │   │   ├── config.json                # Vendor-specific settings (org, roles, URLs)
 │   │   ├── keyvault_secrets.md        # Key Vault secret documentation
 │   │   └── roles.json                 # Role mappings (if applicable)
 ├── docs/                              # Documentation
-│   ├── AUTHENTICATION_GUIDE.md
-│   ├── AZURE_KEYVAULT_SETUP.md
-│   └── vendor_automation_checklist.md
+│   ├── ANNOUNCEMENT.md                # Rollout announcement for IT operations
+│   ├── AUTHENTICATION_GUIDE.md        # Authentication architecture and setup
+│   ├── AZURE_KEYVAULT_SETUP.md        # Key Vault provisioning guide (32 secrets)
+│   ├── USER_GUIDE.md                  # End-user step-by-step guide
+│   └── vendor_automation_checklist.md # Vendor readiness matrix
 └── utils/
     └── logger.py                      # Logging configuration
 ```
@@ -324,6 +329,17 @@ Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YY
 | **Source Control** | `.gitignore` excludes secrets, screenshots, logs, and environment files |
 | **Observability** | Automation runs in non-headless Chromium so operators can monitor and intervene |
 | **Audit Trail** | PDF summary reports and timestamped logs for every provisioning run |
+
+## Documentation
+
+| Document | Audience | Description |
+|---|---|---|
+| [User Guide](docs/USER_GUIDE.md) | End users | Step-by-step walkthrough of the provisioning workflow |
+| [Announcement](docs/ANNOUNCEMENT.md) | IT operations | Rollout announcement with before/after comparison |
+| [Authentication Guide](docs/AUTHENTICATION_GUIDE.md) | Developers / IT admins | MSAL delegated auth architecture, App Registration setup |
+| [Key Vault Setup](docs/AZURE_KEYVAULT_SETUP.md) | IT admins | Complete secret inventory (32 secrets), RBAC configuration |
+| [Vendor Checklist](docs/vendor_automation_checklist.md) | Developers | Readiness matrix for all vendor automation modules |
+| [Onboarding Template](VENDOR_ONBOARDING_TEMPLATE.md) | Subject matter experts | Fill-in template for documenting new vendor workflows |
 
 ## Contributing
 
