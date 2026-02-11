@@ -212,7 +212,7 @@ Some vendor portals require two-factor authentication. When MFA is detected, Nex
 
 ## Adding a New Vendor
 
-See [VENDOR_ONBOARDING_TEMPLATE.md](VENDOR_ONBOARDING_TEMPLATE.md) for the complete guide.
+See [VENDOR_ONBOARDING_TEMPLATE.md](docs/VENDOR_ONBOARDING_TEMPLATE.md) for the complete guide.
 
 **Summary:**
 
@@ -273,7 +273,6 @@ Nexus/
 │   ├── user.py                        # EntraUser model
 │   ├── vendor.py                      # Vendor configuration model
 │   └── automation_result.py           # Provisioning result model
-├── VENDOR_ONBOARDING_TEMPLATE.md      # Template for documenting new vendor workflows
 ├── vendors/                           # Per-vendor configuration
 │   ├── {VendorName}/
 │   │   ├── config.json                # Vendor-specific settings (org, roles, URLs)
@@ -283,7 +282,8 @@ Nexus/
 │   ├── AUTHENTICATION_GUIDE.md        # Authentication architecture and setup
 │   ├── AZURE_KEYVAULT_SETUP.md        # Key Vault provisioning guide (32 secrets)
 │   ├── USER_GUIDE.md                  # End-user step-by-step guide
-│   └── vendor_automation_checklist.md # Vendor readiness matrix
+│   ├── VENDOR_ONBOARDING_TEMPLATE.md  # Template for documenting new vendor workflows
+│   └── VENDOR_AUTOMATION_CHECKLIST.md # Vendor readiness matrix
 └── utils/
     └── logger.py                      # Logging configuration
 ```
@@ -337,8 +337,8 @@ Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YY
 | [Announcement](docs/ANNOUNCEMENT.md) | IT operations | Rollout announcement with before/after comparison |
 | [Authentication Guide](docs/AUTHENTICATION_GUIDE.md) | Developers / IT admins | MSAL delegated auth architecture, App Registration setup |
 | [Key Vault Setup](docs/AZURE_KEYVAULT_SETUP.md) | IT admins | Complete secret inventory (32 secrets), RBAC configuration |
-| [Vendor Checklist](docs/vendor_automation_checklist.md) | Developers | Readiness matrix for all vendor automation modules |
-| [Onboarding Template](VENDOR_ONBOARDING_TEMPLATE.md) | Subject matter experts | Fill-in template for documenting new vendor workflows |
+| [Vendor Checklist](docs/VENDOR_AUTOMATION_CHECKLIST.md) | Developers | Readiness matrix for all vendor automation modules |
+| [Onboarding Template](docs/VENDOR_ONBOARDING_TEMPLATE.md) | Subject matter experts | Fill-in template for documenting new vendor workflows |
 
 ## Contributing
 
