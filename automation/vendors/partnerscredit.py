@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Callable, Awaitable
 
 from playwright.async_api import async_playwright, Page, Browser, Playwright
 
@@ -65,18 +65,27 @@ class PartnersCreditAutomation:
                 {'title': 'Default', 'report_access_level': 'User', 'keywords': []}
             ]
 
-    async def create_account(self, user: EntraUser, headless: bool = False) -> Dict[str, Any]:
+    async def create_account(
+        self,
+        user: EntraUser,
+        headless: bool = False,
+        on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+    ) -> Dict[str, Any]:
         """
         Create a Partners Credit account request for the given user
 
         Args:
             user: EntraUser object with user details
             headless: Whether to run browser in headless mode
+            on_email_conflict: Async callback when email is already in use.
+                Receives (display_name, attempted_email).
+                Should return new email to try, or None to skip this vendor.
 
         Returns:
             Dict with success status and messages
         """
         self.current_user = user
+        self.on_email_conflict = on_email_conflict
         logger.info(f"Starting Partners Credit automation for {user.display_name}")
 
         result = {
@@ -119,9 +128,45 @@ class PartnersCreditAutomation:
             await self._fill_user_form(user_data)
             result['messages'].append("✓ Filled user form")
 
-            # Submit request
-            await self._submit_request()
-            result['messages'].append("✓ User request submitted")
+            # Submit request and check for duplicates
+            submit_result = await self._submit_request()
+
+            if submit_result.get('duplicate_email', False):
+                if on_email_conflict:
+                    result['messages'].append(f"ℹ Email '{user_data['email']}' appears to already be in use")
+                    new_email = await on_email_conflict(user.display_name, user_data['email'])
+
+                    if new_email is None:
+                        # User chose to skip
+                        result['success'] = False
+                        result['warnings'].append(f"⚠ Email '{user_data['email']}' already exists - User chose to skip")
+                        logger.info(f"User skipped Partners Credit due to email conflict: {user.display_name}")
+                        return result
+                    else:
+                        # User provided alternative email - update and retry
+                        user_data['email'] = new_email
+                        result['messages'].append(f"ℹ Trying alternate email: {new_email}")
+
+                        await self._update_email_field(new_email)
+
+                        # Retry submit
+                        submit_result = await self._submit_request()
+                        if not submit_result['success']:
+                            result['errors'].append(f"✗ Retry failed: {submit_result.get('message', 'Unknown error')}")
+                            result['success'] = False
+                            return result
+                        result['messages'].append(f"✓ Used alternate email: {new_email}")
+                else:
+                    result['success'] = False
+                    result['warnings'].append(f"⚠ Email '{user_data['email']}' already exists - Account was not created")
+                    return result
+
+            elif not submit_result['success']:
+                result['errors'].append(f"✗ {submit_result.get('message', 'Submission failed')}")
+                result['success'] = False
+                return result
+            else:
+                result['messages'].append("✓ User request submitted")
 
             result['success'] = True
             result['warnings'].append("⚠ Manual step required: Check email for encrypted PDF with user credentials from Partners Credit")
@@ -278,8 +323,8 @@ class PartnersCreditAutomation:
         logger.info("Login completed")
 
     async def _handle_mfa(self):
-        """Wait for user to manually handle MFA (public/private selection and text code entry)"""
-        logger.info("Waiting for manual MFA completion...")
+        """Handle MFA: auto-select private computer, select email delivery, then wait for code entry"""
+        logger.info("Handling MFA flow...")
 
         # Wait a moment for MFA page to load
         await asyncio.sleep(2)
@@ -288,7 +333,46 @@ class PartnersCreditAutomation:
         await self.page.screenshot(path='partnerscredit_mfa_page.png')
 
         try:
-            logger.info("Please select public/private computer and enter the text message code")
+            # Step 1: Handle the public/private computer selection page (SecureAuth)
+            private_radio = await self.page.query_selector('#ContentPlaceHolder1_RadioButtonListPublicPrivate_1')
+            if private_radio:
+                await private_radio.click()
+                logger.info("Selected 'This is a private computer'")
+                await asyncio.sleep(0.5)
+
+                # Click Submit button
+                await self.page.click('#ContentPlaceHolder1_Button1')
+                logger.info("Clicked Submit on public/private page")
+
+                await self.page.wait_for_load_state('networkidle')
+                await asyncio.sleep(2)
+
+                await self.page.screenshot(path='partnerscredit_after_private_select.png')
+                logger.info("Public/private selection completed")
+            else:
+                logger.info("No public/private selection page detected, continuing...")
+
+            # Step 2: Handle delivery method selection (Email vs Phone/SMS)
+            email_radio = await self.page.query_selector('#ContentPlaceHolder1_MFALoginControl1_RegistrationMethodView_rbEmail1')
+            if email_radio:
+                await email_radio.click()
+                logger.info("Selected 'Email' delivery method")
+                await asyncio.sleep(0.5)
+
+                # Click Submit button
+                await self.page.click('#ContentPlaceHolder1_MFALoginControl1_RegistrationMethodView_btnSubmit')
+                logger.info("Clicked Submit on delivery method page")
+
+                await self.page.wait_for_load_state('networkidle')
+                await asyncio.sleep(2)
+
+                await self.page.screenshot(path='partnerscredit_after_email_select.png')
+                logger.info("Email delivery method selected - code sent to admin email")
+            else:
+                logger.info("No delivery method selection page detected, continuing...")
+
+            # Step 3: Wait for user to enter the email verification code manually
+            logger.info("Waiting for user to enter verification code from email...")
 
             # Poll for MFA completion by looking for dashboard or admin elements
             max_wait_time = 300  # 5 minutes
@@ -443,18 +527,130 @@ class PartnersCreditAutomation:
         await self.page.screenshot(path='partnerscredit_form_filled.png')
         logger.info("User form filled")
 
-    async def _submit_request(self):
-        """Submit the user request"""
+    async def _submit_request(self) -> Dict[str, Any]:
+        """
+        Submit the user request and check for duplicate/error indicators
+
+        Returns:
+            Dict with 'success', 'duplicate_email', and 'message' keys
+        """
         logger.info("Submitting user request...")
 
-        # Click Request New Users button (exact ID from user)
-        await self.page.click('#content_ctl00_btnCreateUsers')
-        await self.page.wait_for_load_state('networkidle')
-        await asyncio.sleep(2)
+        submit_result = {
+            'success': True,
+            'duplicate_email': False,
+            'message': 'User request submitted successfully'
+        }
 
-        # Take screenshot of confirmation
-        await self.page.screenshot(path='partnerscredit_request_submitted.png')
-        logger.info("User request submitted")
+        try:
+            # Click Request New Users button (exact ID from user)
+            await self.page.click('#content_ctl00_btnCreateUsers')
+            await self.page.wait_for_load_state('networkidle')
+            await asyncio.sleep(3)
+
+            # Take screenshot of result
+            await self.page.screenshot(path='partnerscredit_request_submitted.png')
+
+            # Save HTML for debugging/inspection
+            page_content = await self.page.content()
+            with open('partnerscredit_submit_result.html', 'w', encoding='utf-8') as f:
+                f.write(page_content)
+
+            page_lower = page_content.lower()
+
+            # Check for duplicate email indicators
+            email_duplicate_indicators = [
+                'email' in page_lower and 'already' in page_lower,
+                'email' in page_lower and 'exists' in page_lower,
+                'email' in page_lower and 'in use' in page_lower,
+                'email' in page_lower and 'duplicate' in page_lower,
+                'email' in page_lower and 'taken' in page_lower,
+                'email' in page_lower and 'registered' in page_lower,
+            ]
+
+            if any(email_duplicate_indicators):
+                logger.warning("Duplicate email detected after submit")
+                await self.page.screenshot(path='partnerscredit_duplicate_email.png')
+                submit_result['success'] = False
+                submit_result['duplicate_email'] = True
+                submit_result['message'] = 'Email address already in use'
+                return submit_result
+
+            # Check for duplicate user/name indicators
+            user_duplicate_indicators = [
+                'user' in page_lower and 'already' in page_lower and 'exists' in page_lower,
+                'duplicate' in page_lower and 'user' in page_lower,
+                'account' in page_lower and 'already' in page_lower,
+            ]
+
+            if any(user_duplicate_indicators):
+                logger.warning("Duplicate user detected after submit")
+                await self.page.screenshot(path='partnerscredit_duplicate_user.png')
+                submit_result['success'] = False
+                submit_result['duplicate_email'] = True  # Treat as email conflict so tech can adjust
+                submit_result['message'] = 'User already exists'
+                return submit_result
+
+            # Check for visible error elements (snackbar, alert, validation messages)
+            error_selectors = [
+                '.error', '.alert-danger', '.alert-error', '[class*="error"]',
+                '.validation-error', '.field-error', '[role="alert"]',
+                '#snackbar.error', '#snackbar', '.toast-error'
+            ]
+            for selector in error_selectors:
+                try:
+                    elements = await self.page.query_selector_all(selector)
+                    for elem in elements:
+                        if elem and await elem.is_visible():
+                            error_text = await elem.text_content()
+                            if error_text:
+                                error_lower = error_text.lower().strip()
+                                if any(kw in error_lower for kw in ['already', 'exists', 'duplicate', 'in use', 'taken']):
+                                    logger.warning(f"Duplicate indicator in error element: {error_text.strip()}")
+                                    await self.page.screenshot(path='partnerscredit_error_element.png')
+                                    submit_result['success'] = False
+                                    submit_result['duplicate_email'] = True
+                                    submit_result['message'] = error_text.strip()
+                                    return submit_result
+                                elif error_lower and 'success' not in error_lower:
+                                    logger.warning(f"Non-duplicate error element: {error_text.strip()}")
+                                    submit_result['success'] = False
+                                    submit_result['message'] = error_text.strip()
+                                    return submit_result
+                except:
+                    continue
+
+            logger.info("✓ User request submitted successfully - no errors detected")
+
+        except Exception as e:
+            logger.error(f"Submit failed: {e}")
+            await self.page.screenshot(path='partnerscredit_submit_error.png')
+            submit_result['success'] = False
+            submit_result['message'] = str(e)
+
+        return submit_result
+
+    async def _update_email_field(self, new_email: str):
+        """
+        Update the email field with a new value after duplicate detected
+
+        Args:
+            new_email: The new email address to try
+        """
+        logger.info(f"Updating email field to: {new_email}")
+
+        # Clear and refill the email field
+        email_selector = '#content_ctl00_rpUserEntries_txtEmail_0'
+        await self.page.fill(email_selector, '')
+        await asyncio.sleep(0.3)
+        await self.page.fill(email_selector, new_email)
+
+        # Trigger blur event
+        await self.page.press(email_selector, 'Tab')
+        await asyncio.sleep(0.5)
+
+        await self.page.screenshot(path='partnerscredit_email_updated.png')
+        logger.info(f"Email field updated to: {new_email}")
 
     async def _cleanup(self):
         """Clean up browser resources"""
@@ -466,7 +662,12 @@ class PartnersCreditAutomation:
         logger.info("Browser closed")
 
 
-async def provision_user(user: EntraUser, config_path: str, api_key: Optional[str] = None) -> Dict[str, Any]:
+async def provision_user(
+    user: EntraUser,
+    config_path: str,
+    api_key: Optional[str] = None,
+    on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+) -> Dict[str, Any]:
     """
     Main entry point for Partners Credit user provisioning
 
@@ -474,6 +675,9 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
         user: EntraUser object
         config_path: Path to vendor config JSON
         api_key: Anthropic API key for AI matching (optional)
+        on_email_conflict: Async callback when email is taken.
+            Receives (display_name, attempted_email).
+            Should return new email to try, or None to skip this vendor.
 
     Returns:
         Dict with provisioning result
@@ -486,7 +690,11 @@ async def provision_user(user: EntraUser, config_path: str, api_key: Optional[st
     # Create automation instance with AI matcher support
     automation = PartnersCreditAutomation(config_path, keyvault, api_key=api_key)
 
-    # Run automation
-    result = await automation.create_account(user, headless=False)
+    # Run automation with callback
+    result = await automation.create_account(
+        user,
+        headless=False,
+        on_email_conflict=on_email_conflict
+    )
 
     return result

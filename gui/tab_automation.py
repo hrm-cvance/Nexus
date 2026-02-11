@@ -1369,13 +1369,54 @@ class AutomationStatusTab:
             self.automation_summary.vendor_results.append(vendor_result)
 
     async def _run_partnerscredit_automation(self, vendor: VendorConfig):
-        """Run Partners Credit automation"""
+        """Run Partners Credit automation with email conflict handling"""
         vendor_result = VendorResult(
             vendor_name=vendor.name,
             display_name=vendor.display_name,
             success=False,
             start_time=datetime.now()
         )
+
+        # Store for dialog result communication between threads
+        email_dialog_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_email_conflict(display_name: str, attempted_email: str) -> Optional[str]:
+            """
+            Callback to prompt user when email is taken.
+            Shows a dialog on the main thread and waits for the response.
+            """
+            logger.info(f"Email conflict detected for {display_name}: {attempted_email}")
+            email_dialog_holder['ready'].clear()
+            email_dialog_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = EmailConflictDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_email=attempted_email
+                    )
+                    email_dialog_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Dialog error: {e}")
+                    email_dialog_holder['result'] = None
+                finally:
+                    email_dialog_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            email_dialog_holder['ready'].wait(timeout=300)  # 5 minute timeout
+
+            result = email_dialog_holder['result']
+            if result:
+                logger.info(f"User provided alternate email: {result}")
+            else:
+                logger.info("User chose to skip Partners Credit")
+
+            return result
 
         try:
             from automation.vendors.partnerscredit import provision_user
@@ -1399,8 +1440,13 @@ class AutomationStatusTab:
             # Add status message
             self._add_vendor_message(vendor.name, "Starting Partners Credit automation...")
 
-            # Run automation (no API key needed for Partners Credit)
-            result = await provision_user(self.current_user, str(config_path), api_key=None)
+            # Run automation with email conflict callback
+            result = await provision_user(
+                self.current_user,
+                str(config_path),
+                api_key=None,
+                on_email_conflict=handle_email_conflict
+            )
 
             # Display results
             for msg in result.get('messages', []):
@@ -1593,13 +1639,54 @@ class AutomationStatusTab:
             self.automation_summary.vendor_results.append(vendor_result)
 
     async def _run_mmi_automation(self, vendor: VendorConfig):
-        """Run MMI (Mortgage Market Intelligence) automation"""
+        """Run MMI (Mortgage Market Intelligence) automation with email conflict handling"""
         vendor_result = VendorResult(
             vendor_name=vendor.name,
             display_name=vendor.display_name,
             success=False,
             start_time=datetime.now()
         )
+
+        # Store for dialog result communication between threads
+        email_dialog_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_email_conflict(display_name: str, attempted_email: str) -> Optional[str]:
+            """
+            Callback to prompt user when email is taken.
+            Shows a dialog on the main thread and waits for the response.
+            """
+            logger.info(f"Email conflict detected for {display_name}: {attempted_email}")
+            email_dialog_holder['ready'].clear()
+            email_dialog_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = EmailConflictDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_email=attempted_email
+                    )
+                    email_dialog_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Dialog error: {e}")
+                    email_dialog_holder['result'] = None
+                finally:
+                    email_dialog_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            email_dialog_holder['ready'].wait(timeout=300)  # 5 minute timeout
+
+            result = email_dialog_holder['result']
+            if result:
+                logger.info(f"User provided alternate email: {result}")
+            else:
+                logger.info("User chose to skip MMI")
+
+            return result
 
         try:
             from automation.vendors.mmi import provision_user
@@ -1623,8 +1710,13 @@ class AutomationStatusTab:
             # Add status message
             self._add_vendor_message(vendor.name, "Starting MMI automation...")
 
-            # Run automation
-            result = await provision_user(self.current_user, str(config_path))
+            # Run automation with email conflict callback
+            result = await provision_user(
+                self.current_user,
+                str(config_path),
+                api_key=None,
+                on_email_conflict=handle_email_conflict
+            )
 
             # Display results
             for msg in result.get('messages', []):
