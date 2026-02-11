@@ -165,6 +165,13 @@ package-lock.json
 # Windows NUL device artifact
 nul
 
+# Stale per-vendor docs (superseded by centralized docs/)
+vendors/*/keyvault_secrets.md
+vendors/*/README.md
+vendors/*/SETUP_INSTRUCTIONS.md
+vendors/*/*_ONBOARDING.md
+NEXUS_GUI_DESIGN_SPEC.md
+
 # ==============================================================================
 # PROJECT-SPECIFIC
 # ==============================================================================

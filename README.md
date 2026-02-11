@@ -274,10 +274,9 @@ Nexus/
 │   ├── vendor.py                      # Vendor configuration model
 │   └── automation_result.py           # Provisioning result model
 ├── VENDOR_ONBOARDING_TEMPLATE.md      # Template for documenting new vendor workflows
-├── vendors/                           # Per-vendor configuration and docs
+├── vendors/                           # Per-vendor configuration
 │   ├── {VendorName}/
 │   │   ├── config.json                # Vendor-specific settings (org, roles, URLs)
-│   │   ├── keyvault_secrets.md        # Key Vault secret documentation
 │   │   └── roles.json                 # Role mappings (if applicable)
 ├── docs/                              # Documentation
 │   ├── ANNOUNCEMENT.md                # Rollout announcement for IT operations
