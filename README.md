@@ -1,6 +1,6 @@
 # Nexus - Automated Vendor Account Provisioning
 
-Nexus is an automated system for provisioning user accounts across multiple vendor platforms. It integrates with Azure Active Directory (Entra ID) and Azure Key Vault to securely manage credentials and automate account creation based on group membership.
+Nexus automates the creation of user accounts across multiple vendor platforms used by Highland Mortgage Services. It integrates with Azure Active Directory (Entra ID) for user lookup, Azure Key Vault for secure credential management, and Playwright for browser-based automation.
 
 ## Features
 
@@ -9,25 +9,33 @@ Nexus is an automated system for provisioning user accounts across multiple vend
 - **Secure Credential Management**: All vendor credentials stored in Azure Key Vault
 - **AI-Powered Matching**: Intelligent role and branch assignment using Claude AI
 - **Browser Automation**: Playwright-based automation for vendor account creation
-- **User-Friendly GUI**: Tkinter-based interface for non-technical users
-- **Comprehensive Logging**: Detailed logs for troubleshooting and audit trails
+- **Duplicate Detection**: Prompts for resolution when usernames or emails already exist
+- **PDF Summaries**: Generate provisioning summary reports
+- **User-Friendly GUI**: CustomTkinter interface with tabbed workflow
 
 ## Supported Vendors
 
-| Vendor | Entra Group | Status |
-|--------|-------------|--------|
-| **AccountChek** | `AccountChek_Users` | ✅ Active |
-| **BankVOD** | `BankVOD_Users` | ✅ Active |
+| Vendor | Entra Group | Automation | Status |
+|--------|-------------|------------|--------|
+| **AccountChek** | `AccountChek_Users` | `accountchek.py` | Active |
+| **BankVOD** | `BankVOD_Users` | `bankvod.py` | Active |
+| **Clear Capital** | `ClearCapital_Users` | `clearcapital.py` | Active |
+| **DataVerify** | `DataVerify_Users` | `dataverify.py` | Active |
+| **Certified Credit** | `CertifiedCredit_Users` | `certifiedcredit.py` | Active |
+| **Partners Credit** | `PartnersCredit_Users` | `partnerscredit.py` | Active |
+| **The Work Number** | `TheWorkNumber_Users` | `theworknumber.py` | Active |
+| **MMI** | `MMI_Users` | `mmi.py` | Active |
+| **Experience.com** | `Experience_Users` | `experience.py` | Disabled |
 
 ## Architecture
 
 ```
 Nexus Application
-├── Azure AD (Entra ID) - User data & group membership
-├── Azure Key Vault - Secure credential storage
-├── Microsoft Graph API - User search & details
-├── Playwright Browser Automation - Vendor account creation
-└── Claude AI - Role/branch matching
+├── Microsoft Entra ID ─── User data & group membership (Graph API)
+├── Azure Key Vault ────── Vendor credentials (admin logins, URLs)
+├── Playwright ─────────── Browser automation (Chromium, non-headless)
+├── Claude AI ──────────── Role/branch matching
+└── CustomTkinter GUI ──── Tabbed workflow interface
 ```
 
 ## Prerequisites
@@ -35,8 +43,8 @@ Nexus Application
 - **Python 3.8+**
 - **Node.js & npm** (for Playwright)
 - **Azure Subscription** with:
-  - App Registration (for authentication)
-  - Azure Key Vault (for credentials)
+  - App Registration (delegated permissions)
+  - Azure Key Vault
   - Entra ID access
 - **Anthropic API Key** (for AI matching - optional)
 
@@ -60,13 +68,12 @@ playwright install chromium
 
 ### 4. Configure Azure
 
-Follow the detailed setup guide in [docs/AZURE_KEYVAULT_SETUP.md](docs/AZURE_KEYVAULT_SETUP.md)
+Follow the detailed setup guide in [docs/AZURE_KEYVAULT_SETUP.md](docs/AZURE_KEYVAULT_SETUP.md).
 
-**Quick Summary:**
 1. Create App Registration in Azure AD
 2. Create Azure Key Vault
 3. Add vendor credentials as secrets
-4. Grant permissions to Nexus app and users
+4. Grant "Key Vault Secrets User" role to users
 
 ### 5. Configure Application
 
@@ -96,127 +103,106 @@ Edit `app_config.json` with your Azure details:
 
 ## Usage
 
-### Running Nexus
-
 ```bash
 python main.py
 ```
 
 ### Workflow
 
-1. **Sign In**: Sign in with your Microsoft account (must have Graph API permissions)
-2. **Search User**: Search for user by name, email, or employee ID
-3. **Select User**: View user details and detected vendor access
-4. **Provision Accounts**: Start automation to create vendor accounts
-5. **Review Results**: Check logs and screenshots for success/errors
+1. **Sign In** - Authenticate with your Microsoft account
+2. **Search User** - Search Entra ID by name, email, or employee ID
+3. **Select Vendors** - Review detected vendor access based on group membership
+4. **Run Automation** - Provision accounts across selected vendors
+5. **Review Results** - Check status, view logs, export PDF summary
 
-### User Interface
+### GUI Tabs
 
-- **Tab 1: User Search** - Search Entra ID for users
-- **Tab 2: Account Provisioning** - Review user details and select vendors
-- **Tab 3: Automation Status** - Monitor automation progress and view results
+| Tab | Purpose |
+|-----|---------|
+| **Search** | Search Entra ID for users |
+| **Provisioning** | Review user details, select vendors to provision |
+| **Automation** | Monitor automation progress, handle prompts (MFA, duplicates) |
+| **Summary** | View results, export PDF report |
+
+### Duplicate User Handling
+
+When a vendor reports that a username or email already exists, Nexus prompts you with options:
+- **Provide an alternative** username/email to retry
+- **Skip** the vendor entirely
 
 ## Adding a New Vendor
 
-Follow the [VENDOR_ONBOARDING_TEMPLATE.md](VENDOR_ONBOARDING_TEMPLATE.md) guide:
+See [VENDOR_ONBOARDING_TEMPLATE.md](VENDOR_ONBOARDING_TEMPLATE.md) for the full guide.
 
-1. Create vendor directory: `Vendors/{VendorName}/`
-2. Add configuration: `config.json`, `roles.json`
-3. Create automation module: `automation/vendors/{vendorname}.py`
-4. Add to vendor mappings: `config/vendor_mappings.json`
+Quick steps:
+1. Create `vendors/{VendorName}/config.json` with vendor details
+2. Create automation module `automation/vendors/{vendorname}.py`
+3. Implement `provision_user()` async function
+4. Add mapping to `config/vendor_mappings.json`
 5. Store credentials in Azure Key Vault
-6. Test automation
 
-## Key Vault Secrets
+### Key Vault Secret Naming
 
-Each vendor requires secrets stored in Azure Key Vault:
-
-### AccountChek Secrets
-- `accountchek-login-url` - Login page URL
-- `accountchek-login-email` - Admin email
-- `accountchek-login-password` - Admin password
-- `accountchek-newuser-password` - Default password for new users
-
-### BankVOD Secrets
-- `bankvod-login-url` - Login page URL
-- `bankvod-login-account-id` - Company/Account ID (if required)
-- `bankvod-login-email` - Admin email
-- `bankvod-login-password` - Admin password
-- `bankvod-newuser-password` - Default password for new users
-
-## Configuration Files
-
-### Vendor Config (`Vendors/{VendorName}/config.json`)
-```json
-{
-  "vendor": {
-    "name": "VendorName",
-    "display_name": "Vendor Display Name",
-    "keyvault_secrets": {
-      "login_url": "vendor-login-url",
-      "login_email": "vendor-login-email",
-      "login_password": "vendor-login-password",
-      "newuser_password": "vendor-newuser-password"
-    }
-  }
-}
+Each vendor needs secrets following the pattern `{vendorname}-{key}`:
 ```
-
-### Vendor Mappings (`config/vendor_mappings.json`)
-```json
-{
-  "mappings": [
-    {
-      "entra_group_name": "VendorName_Users",
-      "vendor_name": "VendorName",
-      "automation_module": "automation.vendors.vendorname",
-      "enabled": true
-    }
-  ]
-}
+{vendorname}-login-url
+{vendorname}-admin-username (or login-email)
+{vendorname}-admin-password (or login-password)
+{vendorname}-newuser-password (if applicable)
 ```
 
 ## Project Structure
 
 ```
-c:\Scripts\Nexus\
+Nexus/
 ├── main.py                          # Application entry point
 ├── requirements.txt                 # Python dependencies
 ├── package.json                     # Playwright dependencies
-├── gui/                            # GUI components
-│   ├── main_window.py              # Main application window
-│   ├── tab_search.py               # User search tab
-│   ├── tab_provisioning.py         # Account provisioning tab
-│   └── tab_automation.py           # Automation status tab
-├── services/                       # Core services
-│   ├── auth_service.py             # MSAL authentication
-│   ├── graph_api.py                # Microsoft Graph API client
-│   ├── keyvault_service.py         # Azure Key Vault integration
-│   ├── config_manager.py           # Configuration management
-│   ├── msal_credential_adapter.py  # MSAL to Azure Identity adapter
-│   └── ai_matcher.py               # AI role/branch matching
-├── automation/vendors/             # Vendor automation modules
-│   ├── accountchek.py              # AccountChek automation
-│   └── bankvod.py                  # BankVOD automation
-├── models/                         # Data models
-│   ├── user.py                     # User and group models
-│   └── vendor.py                   # Vendor configuration models
-├── utils/                          # Utilities
-│   └── logger.py                   # Logging configuration
-├── Vendors/                        # Vendor-specific configs
+├── gui/                             # GUI components
+│   ├── main_window.py               # Main CustomTkinter window
+│   ├── tab_search.py                # User search tab
+│   ├── tab_provisioning.py          # Vendor selection tab
+│   ├── tab_automation.py            # Automation runner & status
+│   └── tab_summary.py              # Results summary & PDF export
+├── services/                        # Core services
+│   ├── auth_service.py              # MSAL authentication
+│   ├── graph_api.py                 # Microsoft Graph API client
+│   ├── keyvault_service.py          # Azure Key Vault integration
+│   ├── config_manager.py            # Configuration management
+│   ├── ai_matcher.py                # AI role/branch matching
+│   ├── pdf_generator.py             # PDF summary generation
+│   └── msal_credential_adapter.py   # MSAL to Azure Identity adapter
+├── automation/vendors/              # Vendor automation modules
+│   ├── accountchek.py
+│   ├── bankvod.py
+│   ├── clearcapital.py
+│   ├── dataverify.py
+│   ├── certifiedcredit.py
+│   ├── partnerscredit.py
+│   ├── theworknumber.py
+│   ├── mmi.py
+│   └── experience.py
+├── models/                          # Data models
+│   ├── user.py                      # EntraUser model
+│   ├── vendor.py                    # Vendor config models
+│   └── automation_result.py         # Result models
+├── vendors/                         # Vendor-specific configs
 │   ├── AccountChek/
-│   │   ├── config.json
-│   │   ├── roles.json
-│   │   └── README.md
-│   └── BankVOD/
-│       ├── config.json
-│       └── README.md
-├── config/                         # Application configuration
-│   ├── app_config.json             # Azure & app settings
-│   └── vendor_mappings.json        # Vendor-to-group mappings
-└── docs/                           # Documentation
+│   ├── BankVOD/
+│   ├── ClearCapital/
+│   ├── DataVerify/
+│   ├── CertifiedCredit/
+│   ├── PartnersCredit/
+│   ├── TheWorkNumber/
+│   ├── MMI/
+│   └── Experience/
+├── config/                          # Application configuration
+│   ├── app_config.json
+│   └── vendor_mappings.json
+└── docs/                            # Documentation
     ├── AZURE_KEYVAULT_SETUP.md
-    └── AUTHENTICATION_GUIDE.md
+    ├── AUTHENTICATION_GUIDE.md
+    └── vendor_automation_checklist.md
 ```
 
 ## Logging
@@ -224,7 +210,7 @@ c:\Scripts\Nexus\
 Logs are stored in `%APPDATA%\Nexus\logs\`:
 - Format: `nexus_YYYYMMDD.log`
 - Includes: Authentication, API calls, automation steps, errors
-- Log level: INFO (configurable in `logger.py`)
+- Automation screenshots saved to project root during runs (gitignored)
 
 ## Troubleshooting
 
@@ -240,79 +226,33 @@ Logs are stored in `%APPDATA%\Nexus\logs\`:
 
 ### Automation Failures
 - Check logs in `%APPDATA%\Nexus\logs\`
-- Review screenshots (saved to Desktop on error)
+- Review screenshots saved during automation
 - Verify vendor credentials in Key Vault
-- Ensure Playwright browsers are installed
+- Ensure Playwright browsers are installed (`playwright install chromium`)
 
 ### Common Errors
 
-**"Invalid issuer" (AKV10032)**
-- Key Vault tenant mismatch - update Key Vault tenant ID or grant cross-tenant access
-
-**"403 Forbidden"**
-- Insufficient Key Vault permissions - grant "Key Vault Secrets User" role
-
-**"Secret not found"**
-- Missing Key Vault secret - add required secrets to vault
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Invalid issuer (AKV10032)` | Key Vault tenant mismatch | Update Key Vault tenant ID |
+| `403 Forbidden` | Insufficient KV permissions | Grant "Key Vault Secrets User" role |
+| `Secret not found` | Missing KV secret | Add required secrets to vault |
+| `Could not find Add User button` | Tour/modal blocking UI | Check `_dismiss_tour()` selectors |
 
 ## Security
 
-- ✅ All credentials stored in Azure Key Vault (never in code)
-- ✅ Uses Azure AD authentication (no hardcoded passwords)
-- ✅ RBAC-based access control via Key Vault policies
-- ✅ Audit logs for all automation activities
-- ✅ `.gitignore` prevents committing sensitive data
-
-## Development
-
-### Adding a New Vendor Automation
-
-1. Copy `Vendors/AccountChek/` as template
-2. Update `config.json` with vendor details
-3. Create automation module in `automation/vendors/`
-4. Implement `provision_user()` function
-5. Add vendor mapping to `config/vendor_mappings.json`
-6. Add secrets to Azure Key Vault
-7. Test thoroughly before production use
-
-### Running Tests
-```bash
-# Test Graph API connection
-python -c "from services.graph_api import GraphAPIClient; print('Test')"
-
-# Test Key Vault connection
-python -c "from services.keyvault_service import get_keyvault_service; kv = get_keyvault_service(); print(kv.test_connection())"
-```
-
-## Version History
-
-- **v1.0.0** (2025-10-20)
-  - Initial release
-  - AccountChek automation
-  - BankVOD automation
-  - Azure Key Vault integration
-  - AI-powered role matching
-  - Interactive browser authentication
+- All credentials stored in Azure Key Vault (never in code)
+- Azure AD authentication with delegated permissions (no service principals)
+- RBAC-based access control via Key Vault policies
+- `.gitignore` prevents committing secrets, screenshots, and logs
+- Automation runs non-headless so users can monitor and intervene
 
 ## Credits
 
 Built by Chris Vance @ Highland Mortgage Services
 
-Technologies:
-- Python 3.x
-- Playwright (browser automation)
-- Microsoft Authentication Library (MSAL)
-- Azure SDK for Python
-- Anthropic Claude AI
-- Tkinter (GUI)
+Technologies: Python, Playwright, MSAL, Azure SDK, Anthropic Claude, CustomTkinter, ReportLab
 
 ## License
 
 Internal use only - Highland Mortgage Services
-
-## Support
-
-For issues or questions:
-1. Check logs in `%APPDATA%\Nexus\logs\`
-2. Review documentation in `docs/`
-3. Contact IT administrator
