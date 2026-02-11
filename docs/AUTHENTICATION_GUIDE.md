@@ -2,241 +2,173 @@
 
 ## Overview
 
-Nexus uses **unified authentication** - users sign in once via their Microsoft account and gain access to both Microsoft Graph API and Azure Key Vault automatically.
+Nexus uses **unified delegated authentication** — users sign in once with their Microsoft account and gain access to both Microsoft Graph API and Azure Key Vault automatically. No service principals, client secrets, or CLI tools are involved.
 
-## How It Works
+## For End Users
 
-### For End Users (Zero Configuration Required)
+1. Launch **Nexus**
+2. Click **Sign In**
+3. A browser window opens — sign in with your Highland Mortgage Microsoft account
+4. Done. The application now has access to:
+   - **Microsoft Graph API** — to search employees in Entra ID
+   - **Azure Key Vault** — to retrieve vendor admin credentials
 
-1. **Launch Nexus application**
-2. **Click "Sign In"** button
-3. **Browser opens** → Sign in with Microsoft account
-4. **Done!** Application now has access to:
-   - Microsoft Graph API (to search users)
-   - Azure Key Vault (to retrieve vendor credentials)
+You only need to sign in once. Your session is cached and will persist for approximately 90 days.
 
-**No Azure CLI, PowerShell modules, or command-line tools required!**
-
-### Technical Architecture
+## Technical Architecture
 
 ```
-┌──────────────┐
-│ Nexus GUI    │
-└──────┬───────┘
-       │
-       ├─────────> Microsoft Graph API
-       │           (user search, Entra ID data)
-       │           Auth: MSAL PublicClientApplication
-       │
-       └─────────> Azure Key Vault
-                   (vendor credentials)
-                   Auth: MSAL → TokenCredential Adapter
+User clicks "Sign In"
+        │
+        ▼
+┌──────────────────────────────────┐
+│  MSAL PublicClientApplication    │
+│  (interactive browser auth)      │
+└──────────┬───────────────────────┘
+           │
+           ├──► Microsoft Graph API
+           │    Scopes: User.Read.All, GroupMember.Read.All, Group.Read.All
+           │    Used for: employee search, group membership lookup
+           │
+           └──► Azure Key Vault
+                Scope: https://vault.azure.net/.default
+                Bridge: MSALCredentialAdapter → Azure SDK TokenCredential
+                Used for: retrieving vendor admin credentials
 ```
+
+The key innovation is the `MSALCredentialAdapter` class, which bridges MSAL's token format (used by Graph API) to the Azure Identity SDK's `TokenCredential` interface (used by Key Vault). This allows **one sign-in for both services** without requiring separate authentication flows.
 
 ## Authentication Flow
 
 ### 1. User Signs In
 
-When the user clicks "Sign In":
+When the user clicks "Sign In" in the User Search tab:
 
 ```python
-# AuthService uses MSAL PublicClientApplication
+# AuthService wraps MSAL PublicClientApplication
 auth_service.sign_in_interactive(scopes=[
-    "User.Read",
-    "User.ReadBasic.All",
-    "GroupMember.Read.All"
+    "User.Read.All",
+    "GroupMember.Read.All",
+    "Group.Read.All"
 ])
 ```
 
-- Opens browser for interactive authentication
-- User signs in with Microsoft account
+- Opens the system browser for Microsoft authentication
+- User signs in with their Microsoft account
 - MSAL caches the token locally
-- Token is valid for ~1 hour, auto-refreshes
+- Access token is valid for ~1 hour and auto-refreshes
 
 ### 2. Graph API Access
 
+The `GraphAPIClient` uses the `AuthService` to acquire tokens for Graph API calls:
+
 ```python
-# GraphAPIClient uses AuthService tokens
 graph_client = GraphAPIClient(auth_service=auth_service, scopes=scopes)
-users = graph_client.search_users("John Doe")
+users = graph_client.search_users("Jane Smith")
+groups = graph_client.get_user_groups(user_id)
 ```
 
 ### 3. Key Vault Access
 
+The `MSALCredentialAdapter` converts MSAL tokens into the format the Azure Key Vault SDK expects:
+
 ```python
-# MSALCredentialAdapter converts MSAL tokens to Azure Identity format
+# Created in main_window.py during initialization
 msal_credential = MSALCredentialAdapter(
     auth_service=auth_service,
     scopes=["https://vault.azure.net/.default"]
 )
 
-# KeyVaultService uses the adapted credential
 keyvault = KeyVaultService(vault_url=vault_url, credential=msal_credential)
-password = keyvault.get_secret("accountchek-login-password")
+password = keyvault.get_vendor_credential("accountchek", "login-password")
 ```
 
-**Key Innovation:** The `MSALCredentialAdapter` bridges MSAL (used by Graph API) and Azure Identity SDK (used by Key Vault), allowing **one sign-in for both services**.
+## Required Azure Configuration
 
-## Required Azure Permissions
+### App Registration
 
-### App Registration Permissions
+The Azure AD App Registration must be configured as a **public client** (no client secret) with the following **delegated** permissions:
 
-Your Azure AD App Registration must have:
+| API | Permission | Type | Purpose |
+|---|---|---|---|
+| Microsoft Graph | `User.Read.All` | Delegated | Search and read employee profiles |
+| Microsoft Graph | `GroupMember.Read.All` | Delegated | Read group memberships for vendor detection |
+| Microsoft Graph | `Group.Read.All` | Delegated | List and query security groups |
 
-**Microsoft Graph API:**
-- `User.Read` - Sign in and read user profile
-- `User.ReadBasic.All` - Read basic user info
-- `GroupMember.Read.All` - Read group memberships
+The App Registration must also have:
+- **Redirect URI**: `http://localhost:8400` (for the interactive browser flow)
+- **Allow public client flows**: Enabled
 
-**Azure Resource Manager (for Key Vault):**
-- `user_impersonation` - Access Azure Service Management as user
+### Key Vault RBAC
 
-### Key Vault Access Policy
+Key Vault access is granted via Azure RBAC, not through the App Registration's API permissions.
 
-The **Nexus_Users** Entra ID group must have:
-- Role: **Key Vault Secrets User**
-- Permissions: Get, List secrets
+Each Nexus user (or their security group) must hold the **Key Vault Secrets User** role on the vault. See [AZURE_KEYVAULT_SETUP.md](AZURE_KEYVAULT_SETUP.md) for details.
 
-## Token Caching & Refresh
-
-### Automatic Token Management
-
-- **Tokens cached locally** by MSAL (encrypted)
-- **Auto-refresh** before expiration
-- **Silent authentication** on subsequent app launches
-- **No re-sign-in required** unless token expires (typically 90 days)
-
-### Token Lifecycle
+## Token Lifecycle
 
 ```
-1. User signs in → Browser opens
-2. Token acquired (expires in ~1 hour)
-3. Token cached to disk
-4. App restarted → Token loaded from cache
-5. Token expires → Auto-refreshed silently
-6. Refresh token expires (90 days) → User must sign in again
+1. User clicks Sign In → browser opens
+2. Token acquired (access token expires in ~1 hour)
+3. Token cached to disk by MSAL
+4. App restarted → token loaded from cache (silent authentication)
+5. Access token expires → MSAL refreshes silently using refresh token
+6. Refresh token expires (~90 days of inactivity) → user must sign in again
 ```
 
-## Deployment Scenarios
+### What This Means in Practice
 
-### Scenario 1: Desktop Application (Current)
-
-**Authentication Method:** InteractiveBrowserCredential via MSAL
-
-**User Experience:**
-1. Launch Nexus.exe
-2. Click "Sign In"
-3. Browser opens for Microsoft login
-4. Token cached - no sign-in needed for 90 days
-
-**Requirements:**
-- ✅ User has Microsoft account in your tenant
-- ✅ User is member of Nexus_Users group
-- ✅ No Azure CLI required
-- ✅ No PowerShell modules required
-
-### Scenario 2: Server/Shared Environment
-
-**Authentication Method:** Service Principal (App Registration with secret)
-
-**Setup:**
-```python
-from azure.identity import ClientSecretCredential
-
-credential = ClientSecretCredential(
-    tenant_id="your-tenant-id",
-    client_id="your-app-id",
-    client_secret="your-secret"
-)
-
-keyvault = KeyVaultService(vault_url=vault_url, credential=credential)
-```
-
-**Requirements:**
-- Create App Registration
-- Generate client secret
-- Store secret securely (environment variable or Key Vault)
-
-### Scenario 3: Azure VM/App Service
-
-**Authentication Method:** Managed Identity
-
-**Setup:**
-```python
-from azure.identity import ManagedIdentityCredential
-
-credential = ManagedIdentityCredential()
-keyvault = KeyVaultService(vault_url=vault_url, credential=credential)
-```
-
-**Requirements:**
-- Enable System-Assigned Managed Identity on VM/App Service
-- Grant managed identity "Key Vault Secrets User" role
+- Users sign in once and don't need to again for approximately 90 days
+- If the app is restarted, the cached token is loaded automatically
+- No Azure CLI, PowerShell modules, or manual token management required
 
 ## Troubleshooting
 
-### Error: "DefaultAzureCredential failed to retrieve a token"
+### "User has not consented to permissions"
 
-**Cause:** Application trying to use DefaultAzureCredential instead of MSAL adapter.
+The user hasn't approved the app's requested permissions.
 
-**Solution:** Ensure `main_window.py` creates `MSALCredentialAdapter` and passes it to `KeyVaultService`.
+**Fix:** An Azure AD admin can grant tenant-wide consent in the Azure Portal under **App Registrations > [Nexus] > API permissions > Grant admin consent**. Alternatively, the user consents during their first sign-in.
 
-### Error: "User has not consented to permissions"
+### "Key Vault access denied"
 
-**Cause:** User hasn't granted app permissions yet.
+The signed-in user doesn't have permission to read Key Vault secrets.
 
-**Solution:**
-1. Admin grants consent in Azure Portal
-2. Or user consents during first sign-in
+**Fix:**
+1. Add the user to the `Nexus_Users` security group in Entra ID
+2. Ensure the group has the **Key Vault Secrets User** role on the vault
+3. Wait 5–15 minutes for group membership to propagate
 
-### Error: "Key Vault access denied"
+### "DefaultAzureCredential failed to retrieve a token"
 
-**Cause:** User not in Nexus_Users group or group doesn't have Key Vault permissions.
+The app is falling back to `DefaultAzureCredential` instead of using the MSAL adapter.
 
-**Solution:**
-1. Add user to Nexus_Users group in Entra ID
-2. Wait 5-15 minutes for group membership to propagate
-3. Grant group "Key Vault Secrets User" role on Key Vault
+**Fix:** This indicates a code issue. Ensure `main_window.py` creates an `MSALCredentialAdapter` and passes it to `KeyVaultService` during initialization.
 
-### Token Expired
+### Token Expired / "Sign in required"
 
-**Cause:** Refresh token expired (after 90 days of inactivity).
+The refresh token has expired after extended inactivity (approximately 90 days).
 
-**Solution:** User clicks "Sign In" again.
+**Fix:** Click **Sign In** again.
 
-## Security Considerations
+## Security
 
-### Token Storage
-
-- **MSAL tokens** encrypted and stored in user profile
-- **Location:** `%LOCALAPPDATA%\\.IdentityService` (Windows)
-- **Access:** Only the user account can access cached tokens
-
-### Network Traffic
-
-- All communication over **HTTPS**
-- Microsoft OAuth endpoints: `login.microsoftonline.com`
-- Graph API: `graph.microsoft.com`
-- Key Vault: `*.vault.azure.net`
-
-### Best Practices
-
-1. **Never share tokens** between users
-2. **Clear cache on shared computers** after use
-3. **Use Managed Identity** in production on Azure VMs
-4. **Rotate Key Vault secrets** regularly
-5. **Monitor access** via Azure Monitor logs
+| Aspect | Detail |
+|---|---|
+| **Client type** | Public client (no client secret stored anywhere) |
+| **Token storage** | MSAL caches tokens encrypted in the user's profile |
+| **Transport** | All communication over HTTPS |
+| **Endpoints** | `login.microsoftonline.com`, `graph.microsoft.com`, `*.vault.azure.net` |
+| **Permissions** | Delegated only — the app acts as the signed-in user, not as itself |
+| **Scope** | Users can only access Key Vault secrets they've been granted access to via RBAC |
 
 ## For Developers
 
-### Adding New Azure Services
+### Adding Authentication for New Azure Services
 
-To add authentication for additional Azure services (e.g., Azure Storage, Cosmos DB):
+The `MSALCredentialAdapter` can be reused for any Azure SDK service that accepts a `TokenCredential`:
 
 ```python
-# In MSALCredentialAdapter
-scopes = ["https://<service>.azure.net/.default"]
-
 # Example: Azure Storage
 storage_credential = MSALCredentialAdapter(
     auth_service=auth_service,
@@ -247,31 +179,13 @@ storage_credential = MSALCredentialAdapter(
 ### Testing Authentication Locally
 
 ```python
-# Test script
 from services.auth_service import AuthService
 from services.msal_credential_adapter import MSALCredentialAdapter
 
-# Initialize
-auth = AuthService(tenant_id="...", client_id="...")
+auth = AuthService(tenant_id="...", client_id="...", redirect_uri="http://localhost:8400")
+auth.sign_in_interactive(["User.Read.All", "GroupMember.Read.All", "Group.Read.All"])
 
-# Sign in
-auth.sign_in_interactive(["User.Read"])
-
-# Create adapter
-credential = MSALCredentialAdapter(auth)
-
-# Get token
+credential = MSALCredentialAdapter(auth, scopes=["https://vault.azure.net/.default"])
 token = credential.get_token("https://vault.azure.net/.default")
 print(f"Token acquired: {token.token[:20]}...")
 ```
-
-## Summary
-
-✅ **One sign-in** for Graph API and Key Vault
-✅ **No CLI tools** required for end users
-✅ **Automatic token refresh** for 90 days
-✅ **Secure token storage** via MSAL
-✅ **Flexible deployment** (desktop, server, Azure VM)
-✅ **Zero configuration** for end users
-
-Users simply sign in with their Microsoft account and everything works!

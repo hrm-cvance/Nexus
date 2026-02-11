@@ -144,16 +144,14 @@ If the vendor site requires MFA or CAPTCHA, the automation must:
 ### MMI (Mortgage Market Intelligence)
 | # | Requirement | Status | Notes |
 |---|-------------|--------|-------|
-| R1 | End-to-End Creation | PASS | Login (handles SSO redirect), navigate to Manage Seats, fill form, set permissions, create. |
-| R2 | Duplicate Detection | WEAK | Only checks for generic "error", "failed", "already exists", "duplicate" in page content after submission. No proactive check, no retry logic. |
-| R3 | Creation Validation | WEAK | Absence-of-error check only. Falls back to assuming success if no error keywords found. |
-| R4 | Summary Data | NEEDS WORK | Basic progression messages only. No vendor-specific data. |
-| R5 | MFA Handling | PASS | Detects Microsoft/Okta SSO redirect. 5-minute timeout for manual authentication. |
+| R1 | End-to-End Creation | PASS | Login (handles SSO redirect + MFA), direct navigation to `admin-team` page, fill form, set role-based permissions, create. |
+| R2 | Duplicate Detection | PASS | Checks page content and visible error elements for "already exists", "duplicate", "in use", "taken", "registered". Calls `on_email_conflict` callback — user can provide alternate email or skip. Returns with appropriate warnings. |
+| R3 | Creation Validation | WEAK | Absence-of-error check only. Inspects page content and error element selectors (`.error`, `.alert-danger`, `[role="alert"]`, `#snackbar`, etc.) but does not proactively search the team list. |
+| R4 | Summary Data | PASS | Step-by-step messages (login, navigation, form fill, permissions, creation). Includes email conflict details, alternate email used, and activation email note. |
+| R5 | MFA Handling | PASS | Detects Microsoft/Okta SSO redirect (5-min timeout). Also handles MMI's own two-factor SMS verification — auto-clicks "Send Verification Code", 10-min timeout with 30s progress logging. |
 
 **Action items:**
-- [ ] Improve duplicate detection - add `skip: True` flag when duplicate is detected so it's not a hard failure. Add proactive check before creation if possible.
-- [ ] Improve creation validation - look for explicit success message or verify user appears in team list.
-- [ ] Improve summary data - include seat/license info if available.
+- [ ] Improve creation validation — add post-creation verification by searching the team list for the newly created user.
 
 ---
 
@@ -181,11 +179,11 @@ If the vendor site requires MFA or CAPTCHA, the automation must:
 | CertifiedCredit | PASS | PASS | PASS | NEEDS WORK | PASS | NO |
 | PartnersCredit | PASS | FAIL | FAIL | NEEDS WORK | PASS | NO |
 | TheWorkNumber | PASS | FAIL | FAIL | NEEDS WORK | PASS | NO |
-| MMI | PASS | WEAK | WEAK | NEEDS WORK | PASS | NO |
+| MMI | PASS | PASS | WEAK | PASS | PASS | NO |
 | Experience.com | PASS | PASS | PASS | PASS | PASS | YES (disabled) |
 
 ### Priority Order for Remediation
 1. **TheWorkNumber** - Missing duplicate detection and validation entirely.
 2. **PartnersCredit** - Missing duplicate detection and validation entirely.
-3. **MMI** - Weak duplicate detection and validation, needs hardening.
-4. **CertifiedCredit** - Minor summary data improvement needed.
+3. **CertifiedCredit** - Minor summary data improvement needed.
+4. **MMI** - Only remaining gap is post-creation verification (R3).
