@@ -1,258 +1,344 @@
-# Nexus - Automated Vendor Account Provisioning
+<div align="center">
 
-Nexus automates the creation of user accounts across multiple vendor platforms used by Highland Mortgage Services. It integrates with Azure Active Directory (Entra ID) for user lookup, Azure Key Vault for secure credential management, and Playwright for browser-based automation.
+# Nexus
 
-## Features
+**Automated Vendor Account Provisioning**
 
-- **Azure AD Integration**: Search and retrieve user information from Entra ID
-- **Group-Based Provisioning**: Automatically detect which vendors need accounts based on AD group membership
-- **Secure Credential Management**: All vendor credentials stored in Azure Key Vault
-- **AI-Powered Matching**: Intelligent role and branch assignment using Claude AI
-- **Browser Automation**: Playwright-based automation for vendor account creation
-- **Duplicate Detection**: Prompts for resolution when usernames or emails already exist
-- **PDF Summaries**: Generate provisioning summary reports
-- **User-Friendly GUI**: CustomTkinter interface with tabbed workflow
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![Playwright](https://img.shields.io/badge/playwright-automation-2EAD33?logo=playwright&logoColor=white)](https://playwright.dev/python/)
+[![Azure](https://img.shields.io/badge/azure-integrated-0078D4?logo=microsoftazure&logoColor=white)](https://azure.microsoft.com/)
+[![License](https://img.shields.io/badge/license-proprietary-gray)]()
+
+Nexus streamlines employee onboarding by automatically provisioning user accounts across vendor platforms. It integrates with Microsoft Entra ID for identity lookup, Azure Key Vault for credential management, and Playwright for browser automation.
+
+</div>
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Supported Vendors](#supported-vendors)
+- [Architecture](#architecture)
+- [Getting Started](#getting-started)
+- [Deployment](#deployment)
+- [Usage](#usage)
+- [Adding a New Vendor](#adding-a-new-vendor)
+- [Project Structure](#project-structure)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Contributing](#contributing)
+
+## Overview
+
+When a new employee joins, IT must create accounts on multiple third-party vendor platforms. Nexus reduces this from a manual, error-prone process to a guided, automated workflow:
+
+1. **Look up** the employee in Microsoft Entra ID
+2. **Detect** which vendor accounts are needed based on AD group membership
+3. **Provision** accounts automatically via browser automation
+4. **Generate** a PDF summary of all provisioned accounts
+
+### Key Capabilities
+
+| Capability | Description |
+|---|---|
+| **Identity Integration** | Pulls user data and group membership from Microsoft Entra ID via Graph API |
+| **Secure Credentials** | All vendor admin credentials stored in Azure Key Vault — never in code or config files |
+| **Intelligent Matching** | Uses Claude AI to map job titles to vendor-specific roles and branch codes |
+| **Duplicate Detection** | Detects existing accounts and prompts for resolution (skip or provide alternate) |
+| **MFA Handling** | Pauses for manual MFA completion when vendor sites require two-factor authentication |
+| **PDF Reports** | Generates provisioning summary reports for audit and record-keeping |
 
 ## Supported Vendors
 
-| Vendor | Entra Group | Automation | Status |
-|--------|-------------|------------|--------|
-| **AccountChek** | `AccountChek_Users` | `accountchek.py` | Active |
-| **BankVOD** | `BankVOD_Users` | `bankvod.py` | Active |
-| **Clear Capital** | `ClearCapital_Users` | `clearcapital.py` | Active |
-| **DataVerify** | `DataVerify_Users` | `dataverify.py` | Active |
-| **Certified Credit** | `CertifiedCredit_Users` | `certifiedcredit.py` | Active |
-| **Partners Credit** | `PartnersCredit_Users` | `partnerscredit.py` | Active |
-| **The Work Number** | `TheWorkNumber_Users` | `theworknumber.py` | Active |
-| **MMI** | `MMI_Users` | `mmi.py` | Active |
-| **Experience.com** | `Experience_Users` | `experience.py` | Disabled |
+| Vendor | Automation Module | Status |
+|---|---|---|
+| AccountChek | `accountchek.py` | Active |
+| BankVOD | `bankvod.py` | Active |
+| Certified Credit | `certifiedcredit.py` | Active |
+| Clear Capital | `clearcapital.py` | Active |
+| DataVerify | `dataverify.py` | Active |
+| MMI | `mmi.py` | Active |
+| Partners Credit | `partnerscredit.py` | Active |
+| The Work Number (Equifax) | `theworknumber.py` | Active |
+| Experience.com | `experience.py` | Disabled |
+
+Each vendor is mapped to an Entra ID security group. When a user is a member of a vendor's group, Nexus flags that vendor for provisioning.
 
 ## Architecture
 
 ```
-Nexus Application
-├── Microsoft Entra ID ─── User data & group membership (Graph API)
-├── Azure Key Vault ────── Vendor credentials (admin logins, URLs)
-├── Playwright ─────────── Browser automation (Chromium, non-headless)
-├── Claude AI ──────────── Role/branch matching
-└── CustomTkinter GUI ──── Tabbed workflow interface
+┌─────────────────────────────────────────────────────────────┐
+│                        Nexus GUI                            │
+│  ┌──────────┐ ┌──────────────┐ ┌──────────┐ ┌───────────┐  │
+│  │  Search   │ │ Provisioning │ │Automation│ │  Summary  │  │
+│  └────┬─────┘ └──────┬───────┘ └────┬─────┘ └─────┬─────┘  │
+└───────┼──────────────┼──────────────┼─────────────┼─────────┘
+        │              │              │             │
+   ┌────▼────┐   ┌─────▼─────┐  ┌────▼────┐  ┌────▼────┐
+   │ Graph   │   │   Claude   │  │Playwright│  │ReportLab│
+   │  API    │   │     AI     │  │(Chromium)│  │  (PDF)  │
+   └────┬────┘   └───────────┘  └────┬─────┘  └─────────┘
+        │                            │
+   ┌────▼────┐                  ┌────▼─────┐
+   │ Entra   │                  │  Azure   │
+   │   ID    │                  │ Key Vault│
+   └─────────┘                  └──────────┘
 ```
 
-## Prerequisites
+| Component | Purpose |
+|---|---|
+| **Microsoft Entra ID** | Employee identity, group membership, profile attributes |
+| **Azure Key Vault** | Vendor admin credentials, login URLs, default passwords |
+| **Playwright** | Chromium browser automation (non-headless for observability) |
+| **Claude AI** | Maps job titles to vendor-specific roles and branch codes |
+| **CustomTkinter** | Desktop GUI with tabbed workflow |
+| **ReportLab** | PDF provisioning summary generation |
+| **MSAL** | OAuth 2.0 authentication with delegated permissions |
 
-- **Python 3.8+**
-- **Node.js & npm** (for Playwright)
-- **Azure Subscription** with:
-  - App Registration (delegated permissions)
-  - Azure Key Vault
-  - Entra ID access
-- **Anthropic API Key** (for AI matching - optional)
+## Getting Started
 
-## Installation
+### Prerequisites
 
-### 1. Clone Repository
+- Python 3.8+
+- Azure subscription with Entra ID, Key Vault, and an App Registration
+- Anthropic API key *(optional — for AI-powered role matching)*
+
+### Installation
+
 ```bash
-git clone <repository-url>
+# Clone the repository
+git clone https://github.com/hrm-cvance/Nexus.git
 cd Nexus
-```
 
-### 2. Install Python Dependencies
-```bash
+# Install Python dependencies
 pip install -r requirements.txt
-```
 
-### 3. Install Playwright Browsers
-```bash
+# Install Playwright Chromium browser
 playwright install chromium
 ```
 
-### 4. Configure Azure
+### Configuration
 
-Follow the detailed setup guide in [docs/AZURE_KEYVAULT_SETUP.md](docs/AZURE_KEYVAULT_SETUP.md).
+1. Copy the example config and fill in your Azure details:
 
-1. Create App Registration in Azure AD
-2. Create Azure Key Vault
-3. Add vendor credentials as secrets
-4. Grant "Key Vault Secrets User" role to users
+```bash
+cp config/app_config.example.json config/app_config.json
+```
 
-### 5. Configure Application
+2. Edit `config/app_config.json`:
 
-On first run, Nexus creates configuration in `%APPDATA%\Nexus\`:
-- `config\app_config.json` - Azure tenant, client ID, Key Vault URL
-- `config\vendor_mappings.json` - Vendor-to-group mappings
-- `logs\` - Application logs
-
-Edit `app_config.json` with your Azure details:
 ```json
 {
   "microsoft": {
-    "tenant_id": "your-tenant-id",
-    "client_id": "your-client-id",
-    "scopes": [
-      "User.Read.All",
-      "GroupMember.Read.All",
-      "Group.Read.All",
-      "https://vault.azure.net/user_impersonation"
-    ]
+    "tenant_id": "YOUR_AZURE_TENANT_ID",
+    "client_id": "YOUR_AZURE_CLIENT_ID",
+    "redirect_uri": "http://localhost:8400",
+    "scopes": ["User.Read.All", "GroupMember.Read.All", "Group.Read.All"]
   },
   "azure_keyvault": {
-    "vault_url": "https://your-keyvault.vault.azure.net/"
+    "vault_url": "https://YOUR-KEYVAULT-NAME.vault.azure.net/"
   }
 }
 ```
 
-## Usage
+3. Populate Azure Key Vault with vendor credentials. See [docs/AZURE_KEYVAULT_SETUP.md](docs/AZURE_KEYVAULT_SETUP.md) for the full setup guide.
+
+### Run
 
 ```bash
 python main.py
 ```
 
+## Deployment
+
+Nexus supports enterprise deployment via Microsoft Intune.
+
+### Build
+
+The included build script packages the application into a single executable using PyInstaller:
+
+```bash
+build.bat
+```
+
+This produces `dist/Nexus.exe` with all Python dependencies bundled. Playwright Chromium is installed separately at deployment time to avoid a ~150 MB increase in package size.
+
+### Intune Deployment
+
+The `deploy/` directory contains PowerShell scripts for Win32 app deployment:
+
+| Script | Purpose |
+|---|---|
+| `deploy/install.ps1` | Installs `Nexus.exe`, sets up shared Playwright browser path, creates Start Menu shortcut |
+| `deploy/uninstall.ps1` | Removes application, browsers, environment variables, and shortcuts |
+
+Intune Win32 app configuration:
+
+| Setting | Value |
+|---|---|
+| Install command | `powershell.exe -ExecutionPolicy Bypass -File install.ps1` |
+| Uninstall command | `powershell.exe -ExecutionPolicy Bypass -File uninstall.ps1` |
+| Detection rule | File exists: `C:\Program Files\Nexus\Nexus.exe` |
+
+The install script sets a machine-wide `PLAYWRIGHT_BROWSERS_PATH` environment variable so all users share a single Chromium installation at `C:\ProgramData\Nexus\browsers`.
+
+## Usage
+
 ### Workflow
 
-1. **Sign In** - Authenticate with your Microsoft account
-2. **Search User** - Search Entra ID by name, email, or employee ID
-3. **Select Vendors** - Review detected vendor access based on group membership
-4. **Run Automation** - Provision accounts across selected vendors
-5. **Review Results** - Check status, view logs, export PDF summary
-
-### GUI Tabs
-
-| Tab | Purpose |
-|-----|---------|
-| **Search** | Search Entra ID for users |
-| **Provisioning** | Review user details, select vendors to provision |
-| **Automation** | Monitor automation progress, handle prompts (MFA, duplicates) |
-| **Summary** | View results, export PDF report |
+1. **Sign In** — Authenticate with your Microsoft account
+2. **Search** — Find the employee in Entra ID by name, email, or employee ID
+3. **Select Vendors** — Review detected vendors and confirm which to provision
+4. **Automate** — Watch as accounts are created; respond to MFA or duplicate prompts as needed
+5. **Review** — Check results and export a PDF summary
 
 ### Duplicate User Handling
 
-When a vendor reports that a username or email already exists, Nexus prompts you with options:
-- **Provide an alternative** username/email to retry
-- **Skip** the vendor entirely
+When a vendor reports that a username or email already exists, Nexus displays a dialog with options:
+
+- **Provide an alternative** email or username to retry
+- **Skip** the vendor and continue with the remaining vendors
+
+### MFA Handling
+
+Some vendor portals require two-factor authentication. When MFA is detected, Nexus:
+
+1. Automatically clicks "Send Verification Code" (if applicable)
+2. Pauses automation and prompts the user to complete MFA in the browser
+3. Resumes automatically once MFA is completed
 
 ## Adding a New Vendor
 
-See [VENDOR_ONBOARDING_TEMPLATE.md](VENDOR_ONBOARDING_TEMPLATE.md) for the full guide.
+See [VENDOR_ONBOARDING_TEMPLATE.md](VENDOR_ONBOARDING_TEMPLATE.md) for the complete guide.
 
-Quick steps:
-1. Create `vendors/{VendorName}/config.json` with vendor details
-2. Create automation module `automation/vendors/{vendorname}.py`
-3. Implement `provision_user()` async function
-4. Add mapping to `config/vendor_mappings.json`
-5. Store credentials in Azure Key Vault
+**Summary:**
 
-### Key Vault Secret Naming
+1. Create `Vendors/{VendorName}/config.json` with vendor-specific configuration
+2. Create `automation/vendors/{vendorname}.py` implementing the `provision_user()` async entry point
+3. Add a mapping entry in `config/vendor_mappings.json` linking an Entra group to the automation module
+4. Store admin credentials in Azure Key Vault using the naming convention `{vendorname}-{key}`
 
-Each vendor needs secrets following the pattern `{vendorname}-{key}`:
+### Key Vault Secret Naming Convention
+
+Each vendor requires secrets following this pattern:
+
 ```
 {vendorname}-login-url
-{vendorname}-admin-username (or login-email)
-{vendorname}-admin-password (or login-password)
-{vendorname}-newuser-password (if applicable)
+{vendorname}-login-email        (or login-username)
+{vendorname}-login-password     (or admin-password)
+{vendorname}-newuser-password   (if applicable)
 ```
 
 ## Project Structure
 
 ```
 Nexus/
-├── main.py                          # Application entry point
-├── requirements.txt                 # Python dependencies
-├── package.json                     # Playwright dependencies
-├── gui/                             # GUI components
-│   ├── main_window.py               # Main CustomTkinter window
-│   ├── tab_search.py                # User search tab
-│   ├── tab_provisioning.py          # Vendor selection tab
-│   ├── tab_automation.py            # Automation runner & status
-│   └── tab_summary.py              # Results summary & PDF export
-├── services/                        # Core services
-│   ├── auth_service.py              # MSAL authentication
-│   ├── graph_api.py                 # Microsoft Graph API client
-│   ├── keyvault_service.py          # Azure Key Vault integration
-│   ├── config_manager.py            # Configuration management
-│   ├── ai_matcher.py                # AI role/branch matching
-│   ├── pdf_generator.py             # PDF summary generation
-│   └── msal_credential_adapter.py   # MSAL to Azure Identity adapter
-├── automation/vendors/              # Vendor automation modules
+├── main.py                            # Entry point (supports --install-browsers for deployment)
+├── requirements.txt                   # Python dependencies
+├── build.bat                          # PyInstaller build script
+├── deploy/                            # Intune deployment scripts
+│   ├── install.ps1
+│   └── uninstall.ps1
+├── config/                            # Application configuration
+│   ├── app_config.example.json        # Template (copy to app_config.json)
+│   └── vendor_mappings.json           # Entra group → vendor automation mappings
+├── gui/                               # CustomTkinter GUI
+│   ├── main_window.py                 # Main window and tab container
+│   ├── tab_search.py                  # Entra ID user search
+│   ├── tab_provisioning.py            # Vendor selection and user details
+│   ├── tab_automation.py              # Automation runner and status display
+│   └── tab_summary.py                # Results and PDF export
+├── services/                          # Core services
+│   ├── auth_service.py                # MSAL authentication (delegated)
+│   ├── graph_api.py                   # Microsoft Graph API client
+│   ├── keyvault_service.py            # Azure Key Vault integration
+│   ├── config_manager.py              # Configuration loader
+│   ├── ai_matcher.py                  # Claude AI role/branch matching
+│   ├── pdf_generator.py               # PDF report generation
+│   └── msal_credential_adapter.py     # MSAL → Azure Identity bridge
+├── automation/vendors/                # Vendor automation modules
 │   ├── accountchek.py
 │   ├── bankvod.py
+│   ├── certifiedcredit.py
 │   ├── clearcapital.py
 │   ├── dataverify.py
-│   ├── certifiedcredit.py
-│   ├── partnerscredit.py
-│   ├── theworknumber.py
+│   ├── experience.py
 │   ├── mmi.py
-│   └── experience.py
-├── models/                          # Data models
-│   ├── user.py                      # EntraUser model
-│   ├── vendor.py                    # Vendor config models
-│   └── automation_result.py         # Result models
-├── vendors/                         # Vendor-specific configs
-│   ├── AccountChek/
-│   ├── BankVOD/
-│   ├── ClearCapital/
-│   ├── DataVerify/
-│   ├── CertifiedCredit/
-│   ├── PartnersCredit/
-│   ├── TheWorkNumber/
-│   ├── MMI/
-│   └── Experience/
-├── config/                          # Application configuration
-│   ├── app_config.json
-│   └── vendor_mappings.json
-└── docs/                            # Documentation
-    ├── AZURE_KEYVAULT_SETUP.md
-    ├── AUTHENTICATION_GUIDE.md
-    └── vendor_automation_checklist.md
+│   ├── partnerscredit.py
+│   └── theworknumber.py
+├── models/                            # Data models
+│   ├── user.py                        # EntraUser model
+│   ├── vendor.py                      # Vendor configuration model
+│   └── automation_result.py           # Provisioning result model
+├── Vendors/                           # Per-vendor configuration and docs
+│   ├── {VendorName}/
+│   │   ├── config.json                # Vendor-specific settings (org, roles, URLs)
+│   │   ├── keyvault_secrets.md        # Key Vault secret documentation
+│   │   └── roles.json                 # Role mappings (if applicable)
+├── docs/                              # Documentation
+│   ├── AUTHENTICATION_GUIDE.md
+│   ├── AZURE_KEYVAULT_SETUP.md
+│   └── vendor_automation_checklist.md
+└── utils/
+    └── logger.py                      # Logging configuration
 ```
-
-## Logging
-
-Logs are stored in `%APPDATA%\Nexus\logs\`:
-- Format: `nexus_YYYYMMDD.log`
-- Includes: Authentication, API calls, automation steps, errors
-- Automation screenshots saved to project root during runs (gitignored)
 
 ## Troubleshooting
 
 ### Authentication Issues
-- Ensure app registration has correct API permissions
-- Check tenant ID and client ID in config
-- Verify user has required roles
 
-### Key Vault Access Denied
-- User must have "Key Vault Secrets User" role
-- Check Key Vault's tenant ID matches app registration
-- Verify vault URL is correct
+| Symptom | Cause | Resolution |
+|---|---|---|
+| Sign-in fails | Incorrect tenant or client ID | Verify values in `config/app_config.json` |
+| `Insufficient privileges` | Missing API permissions | Ensure app registration has `User.Read.All`, `GroupMember.Read.All`, `Group.Read.All` |
+| Token refresh errors | Expired consent | Re-authenticate or have an admin re-grant permissions |
 
-### Automation Failures
-- Check logs in `%APPDATA%\Nexus\logs\`
-- Review screenshots saved during automation
-- Verify vendor credentials in Key Vault
-- Ensure Playwright browsers are installed (`playwright install chromium`)
+### Key Vault Issues
 
-### Common Errors
+| Symptom | Cause | Resolution |
+|---|---|---|
+| `Invalid issuer (AKV10032)` | Tenant mismatch | Ensure Key Vault tenant matches app registration |
+| `403 Forbidden` | Insufficient permissions | Grant user the **Key Vault Secrets User** RBAC role |
+| `Secret not found` | Missing credential | Add the required secret to Key Vault ([naming convention](#key-vault-secret-naming-convention)) |
 
-| Error | Cause | Fix |
-|-------|-------|-----|
-| `Invalid issuer (AKV10032)` | Key Vault tenant mismatch | Update Key Vault tenant ID |
-| `403 Forbidden` | Insufficient KV permissions | Grant "Key Vault Secrets User" role |
-| `Secret not found` | Missing KV secret | Add required secrets to vault |
-| `Could not find Add User button` | Tour/modal blocking UI | Check `_dismiss_tour()` selectors |
+### Automation Issues
+
+| Symptom | Cause | Resolution |
+|---|---|---|
+| `Executable doesn't exist` | Chromium not installed | Run `playwright install chromium` or contact IT support |
+| Modal/tour blocking form | Vendor UI overlay | Check `_dismiss_tour()` selectors in the automation module |
+| Timeout during MFA | User didn't complete MFA in time | Re-run the automation; MFA timeout is 10 minutes |
+
+### Logs
+
+Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YYYYMMDD.log`. Screenshots are captured at each automation step and saved to the working directory (gitignored).
 
 ## Security
 
-- All credentials stored in Azure Key Vault (never in code)
-- Azure AD authentication with delegated permissions (no service principals)
-- RBAC-based access control via Key Vault policies
-- `.gitignore` prevents committing secrets, screenshots, and logs
-- Automation runs non-headless so users can monitor and intervene
+| Measure | Detail |
+|---|---|
+| **Credential Storage** | All vendor credentials stored in Azure Key Vault — never in source code or config files |
+| **Authentication** | Microsoft Entra ID with delegated permissions via MSAL (no service principals) |
+| **Access Control** | RBAC-based Key Vault policies; users must hold **Key Vault Secrets User** role |
+| **Source Control** | `.gitignore` excludes secrets, screenshots, logs, and environment files |
+| **Observability** | Automation runs in non-headless Chromium so operators can monitor and intervene |
+| **Audit Trail** | PDF summary reports and timestamped logs for every provisioning run |
 
-## Credits
+## Contributing
 
-Built by Chris Vance @ Highland Mortgage Services
+Nexus is an internal tool. To contribute:
 
-Technologies: Python, Playwright, MSAL, Azure SDK, Anthropic Claude, CustomTkinter, ReportLab
+1. Create a feature branch from `main`
+2. Follow existing patterns in `automation/vendors/` for new vendor modules
+3. Ensure all vendor credentials are stored in Key Vault — never hardcode URLs or passwords
+4. Test with a non-production user account before submitting a pull request
+5. Open a PR against `main` for review
 
-## License
+---
 
-Internal use only - Highland Mortgage Services
+<div align="center">
+
+**Nexus** is developed and maintained by the IT department at **Highland Mortgage Services**.
+
+</div>
