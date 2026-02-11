@@ -6,7 +6,8 @@
 # ==============================================================================
 
 # User AppData directory (contains user-specific configs and logs)
-%APPDATA%/
+# On Windows, Nexus stores runtime data in %APPDATA%\Nexus\
+AppData/
 
 # Azure Key Vault secrets (if ever stored locally)
 *.key
@@ -20,6 +21,9 @@ credentials/
 .env
 .env.local
 .env.*.local
+
+# App config (contains real Azure tenant/client IDs and Key Vault URL)
+config/app_config.json
 
 # User settings (may contain personal preferences)
 config/user_settings.json
@@ -103,7 +107,7 @@ screenshots/
 *.jpg
 *.jpeg
 *.gif
-!Vendors/*/logo.png
+!vendors/*/logo.png
 !docs/*.png
 
 # Temporary files
@@ -147,6 +151,21 @@ $RECYCLE.BIN/
 *.lnk
 
 # ==============================================================================
+# DOCUMENTS & BINARIES
+# ==============================================================================
+
+# Vendor SOPs and guides (binary files, don't belong in source control)
+*.pdf
+*.docx
+
+# Node.js artifacts (this is a Python project)
+package.json
+package-lock.json
+
+# Windows NUL device artifact
+nul
+
+# ==============================================================================
 # PROJECT-SPECIFIC
 # ==============================================================================
 
@@ -175,15 +194,14 @@ test_data/
 # ==============================================================================
 
 # Keep vendor logos
-!Vendors/*/logo.png
+!vendors/*/logo.png
 
 # Keep documentation images
 !docs/images/*.png
 
 # Keep example configs (templates)
-!config/app_config.json.example
+!config/app_config.example.json
 
 # Keep README images
 !README_images/
-nul
 .claude/
