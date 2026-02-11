@@ -313,6 +313,269 @@ class UsernameConflictDialog(ctk.CTkToplevel):
         return self.result
 
 
+class EmailConflictDialog(ctk.CTkToplevel):
+    """Dialog for resolving email conflicts in vendor systems"""
+
+    def __init__(self, parent, display_name: str, attempted_email: str):
+        super().__init__(parent)
+        self.title("Email Conflict")
+        self.geometry("450x280")
+        self.resizable(False, False)
+
+        # Center on parent
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+
+        # Main container
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Warning icon and message
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 15))
+
+        warning_label = ctk.CTkLabel(
+            header_frame,
+            text="⚠️",
+            font=ctk.CTkFont(size=32)
+        )
+        warning_label.pack(side="left", padx=(0, 10))
+
+        msg_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        msg_frame.pack(side="left", fill="x", expand=True)
+
+        title_label = ctk.CTkLabel(
+            msg_frame,
+            text="Email Already Taken",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w"
+        )
+        title_label.pack(anchor="w")
+
+        detail_label = ctk.CTkLabel(
+            msg_frame,
+            text=f"Email '{attempted_email}' is already in use\nfor {display_name}",
+            font=ctk.CTkFont(size=13),
+            text_color="gray",
+            anchor="w",
+            justify="left"
+        )
+        detail_label.pack(anchor="w")
+
+        # Email entry
+        entry_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        entry_frame.pack(fill="x", pady=15)
+
+        entry_label = ctk.CTkLabel(
+            entry_frame,
+            text="Enter alternative email address:",
+            font=ctk.CTkFont(size=13)
+        )
+        entry_label.pack(anchor="w", pady=(0, 5))
+
+        self.email_entry = ctk.CTkEntry(entry_frame, width=380, height=35)
+        self.email_entry.pack(fill="x")
+        self.email_entry.insert(0, attempted_email)
+        self.email_entry.select_range(0, 'end')
+        self.email_entry.focus()
+
+        # Bind Enter key to submit
+        self.email_entry.bind('<Return>', lambda e: self._on_submit())
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(20, 0))
+
+        skip_btn = ctk.CTkButton(
+            btn_frame,
+            text="Skip This Vendor",
+            command=self._on_skip,
+            width=150,
+            height=38,
+            fg_color="gray",
+            hover_color="#555555"
+        )
+        skip_btn.pack(side="left")
+
+        submit_btn = ctk.CTkButton(
+            btn_frame,
+            text="Try This Email",
+            command=self._on_submit,
+            width=150,
+            height=38,
+            fg_color="green",
+            hover_color="#006400"
+        )
+        submit_btn.pack(side="right")
+
+        # Wait for window to close
+        self.protocol("WM_DELETE_WINDOW", self._on_skip)
+
+    def _on_submit(self):
+        """User chose to try a new email"""
+        new_email = self.email_entry.get().strip()
+        if new_email:
+            self.result = new_email
+            self.destroy()
+
+    def _on_skip(self):
+        """User chose to skip this vendor"""
+        self.result = None
+        self.destroy()
+
+    def get_result(self) -> Optional[str]:
+        """
+        Wait for dialog to close and return result
+
+        Returns:
+            New email string, or None if user chose to skip
+        """
+        self.wait_window()
+        return self.result
+
+
+class DuplicateUserDialog(ctk.CTkToplevel):
+    """Dialog for resolving duplicate user conflicts (username + email)"""
+
+    def __init__(self, parent, display_name: str, attempted_username: str, attempted_email: str):
+        super().__init__(parent)
+        self.title("User Already Exists")
+        self.geometry("450x370")
+        self.resizable(False, False)
+
+        # Center on parent
+        self.transient(parent)
+        self.grab_set()
+
+        self.result = None
+
+        # Main container
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+
+        # Warning icon and message
+        header_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        header_frame.pack(fill="x", pady=(0, 15))
+
+        warning_label = ctk.CTkLabel(
+            header_frame,
+            text="⚠️",
+            font=ctk.CTkFont(size=32)
+        )
+        warning_label.pack(side="left", padx=(0, 10))
+
+        msg_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        msg_frame.pack(side="left", fill="x", expand=True)
+
+        title_label = ctk.CTkLabel(
+            msg_frame,
+            text="User Already Exists",
+            font=ctk.CTkFont(size=16, weight="bold"),
+            anchor="w"
+        )
+        title_label.pack(anchor="w")
+
+        detail_label = ctk.CTkLabel(
+            msg_frame,
+            text=f"User already exists for {display_name}.\nUpdate the username and email to retry.",
+            font=ctk.CTkFont(size=13),
+            text_color="gray",
+            anchor="w",
+            justify="left"
+        )
+        detail_label.pack(anchor="w")
+
+        # Username entry
+        username_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        username_frame.pack(fill="x", pady=(10, 5))
+
+        username_label = ctk.CTkLabel(
+            username_frame,
+            text="Username:",
+            font=ctk.CTkFont(size=13)
+        )
+        username_label.pack(anchor="w", pady=(0, 3))
+
+        self.username_entry = ctk.CTkEntry(username_frame, width=380, height=35)
+        self.username_entry.pack(fill="x")
+        self.username_entry.insert(0, attempted_username)
+        self.username_entry.select_range(0, 'end')
+        self.username_entry.focus()
+
+        # Email entry
+        email_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        email_frame.pack(fill="x", pady=(5, 10))
+
+        email_label = ctk.CTkLabel(
+            email_frame,
+            text="Email:",
+            font=ctk.CTkFont(size=13)
+        )
+        email_label.pack(anchor="w", pady=(0, 3))
+
+        self.email_entry = ctk.CTkEntry(email_frame, width=380, height=35)
+        self.email_entry.pack(fill="x")
+        self.email_entry.insert(0, attempted_email)
+
+        # Bind Enter key to submit
+        self.email_entry.bind('<Return>', lambda e: self._on_submit())
+        self.username_entry.bind('<Return>', lambda e: self._on_submit())
+
+        # Buttons
+        btn_frame = ctk.CTkFrame(main_frame, fg_color="transparent")
+        btn_frame.pack(fill="x", pady=(15, 0))
+
+        skip_btn = ctk.CTkButton(
+            btn_frame,
+            text="Skip This Vendor",
+            command=self._on_skip,
+            width=150,
+            height=38,
+            fg_color="gray",
+            hover_color="#555555"
+        )
+        skip_btn.pack(side="left")
+
+        submit_btn = ctk.CTkButton(
+            btn_frame,
+            text="Retry",
+            command=self._on_submit,
+            width=150,
+            height=38,
+            fg_color="green",
+            hover_color="#006400"
+        )
+        submit_btn.pack(side="right")
+
+        # Wait for window to close
+        self.protocol("WM_DELETE_WINDOW", self._on_skip)
+
+    def _on_submit(self):
+        """User chose to retry with new values"""
+        new_username = self.username_entry.get().strip()
+        new_email = self.email_entry.get().strip()
+        if new_username and new_email:
+            self.result = {'username': new_username, 'email': new_email}
+            self.destroy()
+
+    def _on_skip(self):
+        """User chose to skip this vendor"""
+        self.result = None
+        self.destroy()
+
+    def get_result(self) -> Optional[dict]:
+        """
+        Wait for dialog to close and return result
+
+        Returns:
+            Dict with 'username' and 'email' keys, or None if user chose to skip
+        """
+        self.wait_window()
+        return self.result
+
+
 class AutomationStatusTab:
     """Automation Status tab implementation"""
 
@@ -1173,13 +1436,97 @@ class AutomationStatusTab:
             self.automation_summary.vendor_results.append(vendor_result)
 
     async def _run_theworknumber_automation(self, vendor: VendorConfig):
-        """Run The Work Number automation"""
+        """Run The Work Number automation with username/email conflict handling"""
         vendor_result = VendorResult(
             vendor_name=vendor.name,
             display_name=vendor.display_name,
             success=False,
             start_time=datetime.now()
         )
+
+        # Store for dialog result communication between threads
+        dialog_result_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_username_conflict(display_name: str, attempted_username: str) -> Optional[str]:
+            """
+            Callback to prompt user when username is taken.
+            Shows a dialog on the main thread and waits for the response.
+            """
+            logger.info(f"Username conflict detected for {display_name}: {attempted_username}")
+            dialog_result_holder['ready'].clear()
+            dialog_result_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = UsernameConflictDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_username=attempted_username
+                    )
+                    dialog_result_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Dialog error: {e}")
+                    dialog_result_holder['result'] = None
+                finally:
+                    dialog_result_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            dialog_result_holder['ready'].wait(timeout=300)  # 5 minute timeout
+
+            result = dialog_result_holder['result']
+            if result:
+                logger.info(f"User provided alternate username: {result}")
+            else:
+                logger.info("User chose to skip The Work Number")
+
+            return result
+
+        # Store for email/duplicate dialog result
+        email_dialog_holder = {'result': None, 'ready': threading.Event()}
+
+        async def handle_email_conflict(display_name: str, attempted_email: str, attempted_username: str = None) -> Optional[dict]:
+            """
+            Callback to prompt user when user already exists.
+            Shows a dialog with both username and email fields.
+            Returns dict with 'username' and 'email' keys, or None to skip.
+            """
+            logger.info(f"Email conflict detected for {display_name}: {attempted_email} (username: {attempted_username})")
+            email_dialog_holder['ready'].clear()
+            email_dialog_holder['result'] = None
+
+            def show_dialog():
+                """Show dialog on main UI thread"""
+                try:
+                    dialog = DuplicateUserDialog(
+                        self.parent,
+                        display_name=display_name,
+                        attempted_username=attempted_username or '',
+                        attempted_email=attempted_email
+                    )
+                    email_dialog_holder['result'] = dialog.get_result()
+                except Exception as e:
+                    logger.error(f"Dialog error: {e}")
+                    email_dialog_holder['result'] = None
+                finally:
+                    email_dialog_holder['ready'].set()
+
+            # Schedule dialog on main thread
+            self.parent.after(0, show_dialog)
+
+            # Wait for dialog result (with timeout)
+            email_dialog_holder['ready'].wait(timeout=300)  # 5 minute timeout
+
+            result = email_dialog_holder['result']
+            if result:
+                logger.info(f"User provided alternate username: {result.get('username')}, email: {result.get('email')}")
+            else:
+                logger.info("User chose to skip The Work Number")
+
+            return result
 
         try:
             from automation.vendors.theworknumber import provision_user
@@ -1203,8 +1550,14 @@ class AutomationStatusTab:
             # Add status message
             self._add_vendor_message(vendor.name, "Starting The Work Number automation...")
 
-            # Run automation
-            result = await provision_user(self.current_user, str(config_path))
+            # Run automation with callbacks
+            result = await provision_user(
+                self.current_user,
+                str(config_path),
+                api_key=None,
+                on_username_conflict=handle_username_conflict,
+                on_email_conflict=handle_email_conflict
+            )
 
             # Display results
             for msg in result.get('messages', []):
