@@ -9,13 +9,13 @@ echo.
 
 REM ── Configuration ──────────────────────────
 set APP_NAME=Nexus
-set APP_VERSION=1.0.0
+set APP_VERSION=1.0.1
 set ENTRY_POINT=main.py
 set DIST_DIR=dist
 set BUILD_DIR=build
 
 REM ── Pre-flight checks ─────────────────────
-echo [1/6] Running pre-flight checks...
+echo [1/8] Running pre-flight checks...
 
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -33,14 +33,18 @@ if errorlevel 1 (
     )
 )
 
+set INTUNE_TOOL=C:\PrepTool\IntuneWinAppUtil.exe
+set INTUNE_SOURCE=%DIST_DIR%\intune_source
+set INTUNE_OUTPUT=%DIST_DIR%\intune_output
+
 REM ── Clean previous builds ──────────────────
-echo [2/6] Cleaning previous builds...
+echo [2/8] Cleaning previous builds...
 if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
 if exist "%DIST_DIR%" rmdir /s /q "%DIST_DIR%"
 if exist "%APP_NAME%.spec" del "%APP_NAME%.spec"
 
 REM ── Resolve customtkinter path ─────────────
-echo [3/6] Resolving package paths...
+echo [3/8] Resolving package paths...
 for /f "delims=" %%i in ('python -c "import customtkinter; import os; print(os.path.dirname(customtkinter.__file__))"') do set CTK_PATH=%%i
 
 if "!CTK_PATH!"=="" (
@@ -50,7 +54,7 @@ if "!CTK_PATH!"=="" (
 echo        customtkinter: !CTK_PATH!
 
 REM ── Generate version info ─────────────────
-echo [4/6] Generating version info...
+echo [4/8] Generating version info...
 python version_info.py
 if errorlevel 1 (
     echo [ERROR] Failed to generate version info.
@@ -58,7 +62,7 @@ if errorlevel 1 (
 )
 
 REM ── Build executable ───────────────────────
-echo [5/6] Building %APP_NAME% v%APP_VERSION%...
+echo [5/8] Building %APP_NAME% v%APP_VERSION%...
 echo        This may take several minutes...
 echo.
 
@@ -109,10 +113,9 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM ── Post-build summary ─────────────────────
+REM ── Post-build verification ──────────────────
 echo.
-echo [6/6] Build complete!
-echo.
+echo [6/8] Verifying build output...
 
 if exist "%DIST_DIR%\%APP_NAME%.exe" (
     for %%A in ("%DIST_DIR%\%APP_NAME%.exe") do (
@@ -126,23 +129,55 @@ if exist "%DIST_DIR%\%APP_NAME%.exe" (
     exit /b 1
 )
 
+REM ── Prepare Intune source folder ─────────────
+echo.
+echo [7/8] Preparing Intune package source...
+
+if exist "%INTUNE_SOURCE%" rmdir /s /q "%INTUNE_SOURCE%"
+if exist "%INTUNE_OUTPUT%" rmdir /s /q "%INTUNE_OUTPUT%"
+mkdir "%INTUNE_SOURCE%"
+mkdir "%INTUNE_OUTPUT%"
+
+copy "%DIST_DIR%\%APP_NAME%.exe" "%INTUNE_SOURCE%\" >nul
+copy "deploy\install.ps1" "%INTUNE_SOURCE%\" >nul
+copy "deploy\uninstall.ps1" "%INTUNE_SOURCE%\" >nul
+echo        Copied Nexus.exe, install.ps1, uninstall.ps1 to %INTUNE_SOURCE%
+
+REM ── Create .intunewin package ────────────────
+echo.
+echo [8/8] Creating .intunewin package...
+
+if not exist "%INTUNE_TOOL%" (
+    echo [WARNING] IntuneWinAppUtil.exe not found at %INTUNE_TOOL%
+    echo          Skipping .intunewin packaging. Create it manually:
+    echo          IntuneWinAppUtil.exe -c %INTUNE_SOURCE% -s install.ps1 -o %INTUNE_OUTPUT% -q
+    goto :summary
+)
+
+"%INTUNE_TOOL%" -c "%INTUNE_SOURCE%" -s install.ps1 -o "%INTUNE_OUTPUT%" -q
+
+if errorlevel 1 (
+    echo [WARNING] .intunewin packaging failed. Check IntuneWinAppUtil output above.
+) else (
+    echo  Package: %INTUNE_OUTPUT%\install.intunewin
+)
+
+:summary
 echo.
 echo ==========================================
-echo  DEPLOYMENT NOTES
+echo  BUILD COMPLETE - %APP_NAME% v%APP_VERSION%
 echo ==========================================
 echo.
-echo  1. The exe bundles all Python dependencies.
+echo  Exe:      %DIST_DIR%\%APP_NAME%.exe
+if exist "%INTUNE_OUTPUT%\install.intunewin" (
+echo  Intune:   %INTUNE_OUTPUT%\install.intunewin
+)
 echo.
-echo  2. Playwright Chromium browser is NOT bundled
-echo     in the exe (it would add ~150MB). The Intune
-echo     deploy\install.ps1 script handles browser
-echo     installation to C:\ProgramData\Nexus\browsers.
-echo.
-echo  3. Config is bundled in the exe. Logs are
-echo     written to %%APPDATA%%\Nexus\logs\.
-echo.
-echo  4. For Intune deployment, wrap the exe in an
-echo     .intunewin package with the install script.
+echo  Notes:
+echo  - Playwright Chromium is NOT bundled (~150MB).
+echo    install.ps1 handles browser installation.
+echo  - Config is bundled in the exe.
+echo  - Logs: %%APPDATA%%\Nexus\logs\
 echo.
 echo ==========================================
 

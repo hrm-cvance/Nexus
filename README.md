@@ -157,22 +157,30 @@ Nexus supports enterprise deployment via Microsoft Intune.
 
 ### Build
 
-The included build script packages the application into a single executable using PyInstaller:
+The included build script packages the application into a single executable and creates the Intune deployment package in one step:
 
 ```bash
 build.bat
 ```
 
-This produces `dist/Nexus.exe` (~111 MB) with all Python dependencies bundled. The build pipeline:
+This produces:
+- `dist/Nexus.exe` (~113 MB) — standalone executable with all Python dependencies bundled
+- `dist/intune_output/install.intunewin` — ready-to-upload Intune Win32 app package
+
+The 8-step build pipeline:
 
 1. Pre-flight checks (Python, PyInstaller)
 2. Cleans previous builds
 3. Resolves package paths (customtkinter)
 4. Generates Windows version metadata from `APP_VERSION` in `main.py`
 5. Runs PyInstaller with icon, version info, and all hidden imports
-6. Reports output size
+6. Verifies build output
+7. Assembles Intune source folder (`dist/intune_source/` with Nexus.exe + install.ps1 + uninstall.ps1)
+8. Runs `C:\PrepTool\IntuneWinAppUtil.exe` to create the `.intunewin` package
 
 The exe embeds Windows file properties (right-click → Properties → Details): version number, company name, and product description. Version is maintained in one place (`APP_VERSION` in `main.py`) and flows to the window title bar, exe metadata, and Intune detection rules.
+
+> **Note:** If `IntuneWinAppUtil.exe` is not found at `C:\PrepTool\`, the build still succeeds — it just skips the `.intunewin` packaging step and prints the manual command.
 
 ### Intune Deployment
 
@@ -182,14 +190,6 @@ The `deploy/` directory contains PowerShell scripts for Win32 app deployment:
 |---|---|
 | `deploy/install.ps1` | Installs `Nexus.exe`, sets up shared Playwright browser path, creates Start Menu shortcut |
 | `deploy/uninstall.ps1` | Removes application, browsers, environment variables, and shortcuts |
-
-**Creating the .intunewin package:**
-
-```bash
-IntuneWinAppUtil.exe -c dist\intune_source -s dist\intune_source\install.ps1 -o dist\intune_output -q
-```
-
-The source folder should contain `Nexus.exe`, `install.ps1`, and `uninstall.ps1`.
 
 **Intune Win32 app configuration:**
 
@@ -258,7 +258,7 @@ Each vendor requires secrets following this pattern:
 Nexus/
 ├── main.py                            # Entry point (supports --install-browsers for deployment)
 ├── requirements.txt                   # Python dependencies
-├── build.bat                          # PyInstaller build script (6-step: preflight → build → package)
+├── build.bat                          # Build + Intune packaging (8-step: preflight → build → .intunewin)
 ├── version_info.py                    # Generates Windows exe version metadata from APP_VERSION
 ├── deploy/                            # Intune deployment scripts
 │   ├── install.ps1

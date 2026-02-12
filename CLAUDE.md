@@ -20,7 +20,7 @@ python main.py
 ## Project Structure
 ```
 main.py                          # Entry point (supports --install-browsers for deployment)
-build.bat                        # PyInstaller build script → dist/Nexus.exe
+build.bat                        # Build script → dist/Nexus.exe + dist/intune_output/install.intunewin
 version_info.py                  # Generates Windows exe version metadata from APP_VERSION
 deploy/
   install.ps1                    # Intune install script (shared Playwright browser path)
@@ -88,11 +88,13 @@ Each vendor has a config in `Vendors/{VendorName}/config.json` and a mapping ent
 Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url`, `accountchek-admin-password`).
 
 ## Deployment
-- **Build:** `build.bat` produces `dist/Nexus.exe` via PyInstaller (uses `sys._MEIPASS` for bundled resources)
+- **Build:** `build.bat` produces `dist/Nexus.exe` via PyInstaller AND `dist/intune_output/install.intunewin` via IntuneWinAppUtil (8-step pipeline)
 - **Version info:** `version_info.py` reads `APP_VERSION` from `main.py` and generates `version_info.txt` for PyInstaller's `--version-file` flag (embeds File Version, Product Version, Company Name in the exe properties)
-- **Intune:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment; package with `IntuneWinAppUtil.exe`
+- **Intune packaging:** `build.bat` automatically assembles `dist/intune_source/` (Nexus.exe + install.ps1 + uninstall.ps1) and runs `C:\PrepTool\IntuneWinAppUtil.exe` to produce `dist/intune_output/install.intunewin`
+- **Intune deployment scripts:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment
 - **Playwright browsers:** Shared path via `PLAYWRIGHT_BROWSERS_PATH` env var at `C:\ProgramData\Nexus\browsers`
 - **Config at runtime:** Bundled inside the exe; `config_manager.py` loads from `sys._MEIPASS` when frozen
+- **IntuneWinAppUtil location:** `C:\PrepTool\IntuneWinAppUtil.exe` (Microsoft Win32 Content Prep Tool)
 
 ### Icon & Window Identity
 - `assets/generate_icon.py` renders the N letterform using Segoe UI Bold font hinting at each size independently (not downscaled from SVG)
