@@ -62,6 +62,7 @@ MANIFEST
 # PyInstaller
 *.manifest
 *.spec
+version_info.txt
 
 # Unit test / coverage
 htmlcov/
@@ -202,6 +203,10 @@ test_data/
 
 # Keep vendor logos
 !Vendors/*/logo.png
+
+# Keep app assets
+!assets/*.png
+!assets/*.ico
 
 # Keep documentation images
 !docs/images/*.png

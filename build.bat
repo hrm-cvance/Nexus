@@ -15,7 +15,7 @@ set DIST_DIR=dist
 set BUILD_DIR=build
 
 REM ── Pre-flight checks ─────────────────────
-echo [1/5] Running pre-flight checks...
+echo [1/6] Running pre-flight checks...
 
 python --version >nul 2>&1
 if errorlevel 1 (
@@ -34,13 +34,13 @@ if errorlevel 1 (
 )
 
 REM ── Clean previous builds ──────────────────
-echo [2/5] Cleaning previous builds...
+echo [2/6] Cleaning previous builds...
 if exist "%BUILD_DIR%" rmdir /s /q "%BUILD_DIR%"
 if exist "%DIST_DIR%" rmdir /s /q "%DIST_DIR%"
 if exist "%APP_NAME%.spec" del "%APP_NAME%.spec"
 
 REM ── Resolve customtkinter path ─────────────
-echo [3/5] Resolving package paths...
+echo [3/6] Resolving package paths...
 for /f "delims=" %%i in ('python -c "import customtkinter; import os; print(os.path.dirname(customtkinter.__file__))"') do set CTK_PATH=%%i
 
 if "!CTK_PATH!"=="" (
@@ -49,8 +49,16 @@ if "!CTK_PATH!"=="" (
 )
 echo        customtkinter: !CTK_PATH!
 
+REM ── Generate version info ─────────────────
+echo [4/6] Generating version info...
+python version_info.py
+if errorlevel 1 (
+    echo [ERROR] Failed to generate version info.
+    exit /b 1
+)
+
 REM ── Build executable ───────────────────────
-echo [4/5] Building %APP_NAME% v%APP_VERSION%...
+echo [5/6] Building %APP_NAME% v%APP_VERSION%...
 echo        This may take several minutes...
 echo.
 
@@ -58,6 +66,7 @@ pyinstaller --onefile ^
     --name "%APP_NAME%" ^
     --windowed ^
     --icon "assets\nexus.ico" ^
+    --version-file "version_info.txt" ^
     --add-data "config;config" ^
     --add-data "vendors;vendors" ^
     --add-data "assets;assets" ^
@@ -102,7 +111,7 @@ if errorlevel 1 (
 
 REM ── Post-build summary ─────────────────────
 echo.
-echo [5/5] Build complete!
+echo [6/6] Build complete!
 echo.
 
 if exist "%DIST_DIR%\%APP_NAME%.exe" (
