@@ -11,14 +11,18 @@ This guide walks you through using Nexus to provision vendor accounts for new em
 
 ## Step 1: Sign In
 
-Before you can do anything, you need to sign in with your Microsoft account.
+Before you can do anything, you need to be signed in with your Microsoft account.
+
+**If you've used Nexus before**, your sign-in is remembered automatically. When you open the app, the status indicator will already be green and show **Connected as: your email**. You can skip straight to Step 2.
+
+**If this is your first time** (or you previously signed out):
 
 1. Click the **Sign In** button in the Microsoft Sign-In section
 2. A browser window will open with the Microsoft login page
 3. Sign in with your Highland Mortgage email and password
 4. Once signed in, the status indicator will turn green and show **Connected**
 
-> **Tip:** This is the same Microsoft account you use for Outlook and Teams. You only need to sign in once per session.
+> **Tip:** This is the same Microsoft account you use for Outlook and Teams. Your sign-in persists between sessions — you won't need to sign in again unless you click **Sign Out** or go approximately 90 days without using Nexus.
 
 ## Step 2: Search for the Employee
 
@@ -122,7 +126,7 @@ Click **Start New Automation** to go back to the User Search tab and provision a
 
 | Task | Where | How |
 |---|---|---|
-| Sign in | User Search tab | Click **Sign In**, use your Microsoft credentials |
+| Sign in | User Search tab | Automatic if previously signed in; otherwise click **Sign In** |
 | Find an employee | User Search tab | Search by name, email, or employee ID |
 | Choose vendors | Account Provisioning tab | Check/uncheck vendor cards, then click **Start Automation** |
 | Handle MFA | Automation Status tab | Enter the code in the browser window when prompted |

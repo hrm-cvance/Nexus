@@ -94,7 +94,7 @@ Each vendor is mapped to an Entra ID security group. When a user is a member of 
 | **Claude AI** | Maps job titles to vendor-specific roles and branch codes |
 | **CustomTkinter** | Desktop GUI with tabbed workflow |
 | **ReportLab** | PDF provisioning summary generation |
-| **MSAL** | OAuth 2.0 authentication with delegated permissions |
+| **MSAL** | OAuth 2.0 authentication with delegated permissions and persistent token cache |
 
 ## Getting Started
 
@@ -189,7 +189,7 @@ For a detailed walkthrough, see the [User Guide](docs/USER_GUIDE.md).
 
 ### Workflow
 
-1. **Sign In** — Authenticate with your Microsoft account
+1. **Sign In** — Authenticate with your Microsoft account (remembered between sessions)
 2. **Search** — Find the employee in Entra ID by name, email, or employee ID
 3. **Select Vendors** — Review detected vendors and confirm which to provision
 4. **Automate** — Watch as accounts are created; respond to MFA or duplicate prompts as needed
@@ -252,7 +252,7 @@ Nexus/
 │   ├── tab_automation.py              # Automation runner and status display
 │   └── tab_summary.py                # Results and PDF export
 ├── services/                          # Core services
-│   ├── auth_service.py                # MSAL authentication (delegated)
+│   ├── auth_service.py                # MSAL authentication (delegated, persistent token cache)
 │   ├── graph_api.py                   # Microsoft Graph API client
 │   ├── keyvault_service.py            # Azure Key Vault integration
 │   ├── config_manager.py              # Configuration loader
@@ -297,6 +297,7 @@ Nexus/
 | Sign-in fails | Incorrect tenant or client ID | Verify values in `config/app_config.json` |
 | `Insufficient privileges` | Missing API permissions | Ensure app registration has `User.Read.All`, `GroupMember.Read.All`, `Group.Read.All` |
 | Token refresh errors | Expired consent | Re-authenticate or have an admin re-grant permissions |
+| Sign-in not remembered | Cache file missing | Ensure `%LOCALAPPDATA%\Nexus\` is writable; signing out deletes the cache |
 
 ### Key Vault Issues
 
@@ -323,7 +324,7 @@ Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YY
 | Measure | Detail |
 |---|---|
 | **Credential Storage** | All vendor credentials stored in Azure Key Vault — never in source code or config files |
-| **Authentication** | Microsoft Entra ID with delegated permissions via MSAL (no service principals) |
+| **Authentication** | Microsoft Entra ID with delegated permissions via MSAL (no service principals); persistent token cache at `%LOCALAPPDATA%\Nexus\` |
 | **Access Control** | RBAC-based Key Vault policies; users must hold **Key Vault Secrets User** role |
 | **Source Control** | `.gitignore` excludes secrets, screenshots, logs, and environment files |
 | **Observability** | Automation runs in non-headless Chromium so operators can monitor and intervene |

@@ -7,13 +7,14 @@ Nexus uses **unified delegated authentication** — users sign in once with thei
 ## For End Users
 
 1. Launch **Nexus**
-2. Click **Sign In**
-3. A browser window opens — sign in with your Highland Mortgage Microsoft account
-4. Done. The application now has access to:
+2. If you've signed in before, you're **already connected** — no action needed
+3. If this is your first time (or you previously signed out), click **Sign In**
+4. A browser window opens — sign in with your Highland Mortgage Microsoft account
+5. Done. The application now has access to:
    - **Microsoft Graph API** — to search employees in Entra ID
    - **Azure Key Vault** — to retrieve vendor admin credentials
 
-You only need to sign in once. Your session is cached and will persist for approximately 90 days.
+Your sign-in is remembered between sessions. You only need to sign in again if you explicitly sign out or after approximately 90 days of inactivity.
 
 ## Technical Architecture
 
@@ -55,8 +56,9 @@ auth_service.sign_in_interactive(scopes=[
 
 - Opens the system browser for Microsoft authentication
 - User signs in with their Microsoft account
-- MSAL caches the token locally
+- MSAL caches the token to disk at `%LOCALAPPDATA%\Nexus\token_cache.bin`
 - Access token is valid for ~1 hour and auto-refreshes
+- On next app launch, the cached token is loaded automatically (no browser sign-in needed)
 
 ### 2. Graph API Access
 
@@ -110,16 +112,18 @@ Each Nexus user (or their security group) must hold the **Key Vault Secrets User
 ```
 1. User clicks Sign In → browser opens
 2. Token acquired (access token expires in ~1 hour)
-3. Token cached to disk by MSAL
-4. App restarted → token loaded from cache (silent authentication)
+3. Token cached to disk at %LOCALAPPDATA%\Nexus\token_cache.bin
+4. App restarted → cache loaded from disk → user auto-authenticated (no browser)
 5. Access token expires → MSAL refreshes silently using refresh token
 6. Refresh token expires (~90 days of inactivity) → user must sign in again
+7. User clicks Sign Out → cache file deleted from disk → next launch requires sign-in
 ```
 
 ### What This Means in Practice
 
 - Users sign in once and don't need to again for approximately 90 days
-- If the app is restarted, the cached token is loaded automatically
+- If the app is restarted, the cached token is loaded automatically — no sign-in prompt
+- Signing out fully clears the cache from disk, requiring a fresh sign-in next time
 - No Azure CLI, PowerShell modules, or manual token management required
 
 ## Troubleshooting
@@ -156,7 +160,7 @@ The refresh token has expired after extended inactivity (approximately 90 days).
 | Aspect | Detail |
 |---|---|
 | **Client type** | Public client (no client secret stored anywhere) |
-| **Token storage** | MSAL caches tokens encrypted in the user's profile |
+| **Token storage** | MSAL `SerializableTokenCache` persisted to `%LOCALAPPDATA%\Nexus\token_cache.bin`; deleted on sign-out |
 | **Transport** | All communication over HTTPS |
 | **Endpoints** | `login.microsoftonline.com`, `graph.microsoft.com`, `*.vault.azure.net` |
 | **Permissions** | Delegated only — the app acts as the signed-in user, not as itself |

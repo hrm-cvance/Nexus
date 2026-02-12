@@ -7,7 +7,7 @@ Nexus is an internal tool for Highland Mortgage Services that automates vendor a
 - **Language:** Python 3.8+
 - **GUI:** CustomTkinter (customtkinter)
 - **Browser Automation:** Playwright (async API, Chromium)
-- **Auth:** MSAL (Microsoft Authentication Library) with delegated permissions
+- **Auth:** MSAL (Microsoft Authentication Library) with delegated permissions and persistent token cache
 - **Cloud:** Azure Key Vault, Microsoft Graph API
 - **AI:** Anthropic Claude (role/branch matching)
 - **PDF:** ReportLab (summary generation)
@@ -31,7 +31,7 @@ gui/
   tab_automation.py              # Automation runner & status display
   tab_summary.py                 # Results summary & PDF export
 services/
-  auth_service.py                # MSAL authentication (delegated)
+  auth_service.py                # MSAL authentication (delegated, persistent token cache)
   graph_api.py                   # Microsoft Graph API client
   keyvault_service.py            # Azure Key Vault secret retrieval
   config_manager.py              # App configuration (loads from bundled resources)
@@ -86,6 +86,12 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - **Intune:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment
 - **Playwright browsers:** Shared path via `PLAYWRIGHT_BROWSERS_PATH` env var at `C:\ProgramData\Nexus\browsers`
 - **Config at runtime:** Bundled inside the exe; `config_manager.py` loads from `sys._MEIPASS` when frozen
+
+### Authentication & Token Cache
+- `AuthService` uses MSAL's `SerializableTokenCache` to persist tokens to `%LOCALAPPDATA%\Nexus\token_cache.bin`
+- On startup, cached accounts are restored so users are auto-authenticated without a browser sign-in
+- Sign-out deletes the cache file entirely (not just cleared in memory)
+- Refresh tokens persist for ~90 days of inactivity; after that, a fresh browser sign-in is required
 
 ## Important Notes
 - All automation runs in a non-headless Chromium browser so the user can observe and intervene (e.g., MFA)
