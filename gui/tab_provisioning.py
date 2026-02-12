@@ -260,6 +260,7 @@ class AccountProvisioningTab:
     def _detect_vendors(self):
         """Detect applicable vendors based on user's group membership"""
         self.detected_vendors = []
+        self.selected_vendors = []
 
         if not self.current_user or not self.current_user.groups:
             logger.info("No groups found for user")
@@ -337,11 +338,11 @@ class AccountProvisioningTab:
     def _create_vendor_card(self, vendor: VendorConfig):
         """Create a vendor selection card"""
         card = ctk.CTkFrame(self.vendors_container)
-        card.pack(fill="x", pady=5)
+        card.pack(fill="x", pady=2)
 
         # Checkbox and vendor info container
         content_frame = ctk.CTkFrame(card, fg_color="transparent")
-        content_frame.pack(fill="x", padx=15, pady=12)
+        content_frame.pack(fill="x", padx=15, pady=8)
 
         # Checkbox for selection
         checkbox_var = ctk.BooleanVar(value=vendor.is_selected)
@@ -387,10 +388,10 @@ class AccountProvisioningTab:
     def _create_disabled_vendor_card(self, mapping: dict):
         """Create a grayed-out vendor card for a disabled vendor"""
         card = ctk.CTkFrame(self.vendors_container, fg_color="#2b2b2b")
-        card.pack(fill="x", pady=5)
+        card.pack(fill="x", pady=2)
 
         content_frame = ctk.CTkFrame(card, fg_color="transparent")
-        content_frame.pack(fill="x", padx=15, pady=12)
+        content_frame.pack(fill="x", padx=15, pady=8)
 
         # Disabled checkbox (unchecked, non-interactive)
         checkbox = ctk.CTkCheckBox(
