@@ -165,7 +165,11 @@ class MMIAutomation:
             except:
                 pass
 
-        finally:
+            # Leave browser open on failure so the tech can inspect
+            logger.info("Browser left open for inspection after failure")
+
+        else:
+            # Only close browser on success
             await self._cleanup()
 
         logger.info(f"MMI result: {result}")
@@ -214,12 +218,30 @@ class MMIAutomation:
         }
 
     async def _start_browser(self, headless: bool = False):
-        """Start Playwright browser"""
-        logger.info("Starting browser...")
+        """Start Playwright browser with persistent context for session caching"""
+        import os
+        logger.info("Starting browser with persistent context...")
         self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(headless=headless)
-        self.page = await self.browser.new_page()
-        logger.info("Browser started")
+
+        # Use persistent context to cache cookies/session between runs
+        user_data_dir = os.path.join(
+            os.environ.get('LOCALAPPDATA', os.path.expanduser('~')),
+            'Nexus', 'browser_sessions', 'mmi'
+        )
+        os.makedirs(user_data_dir, exist_ok=True)
+        logger.info(f"Browser session directory: {user_data_dir}")
+
+        self.browser = await self.playwright.chromium.launch_persistent_context(
+            user_data_dir=user_data_dir,
+            headless=headless,
+            accept_downloads=True
+        )
+        # launch_persistent_context returns a context with a default page
+        if self.browser.pages:
+            self.page = self.browser.pages[0]
+        else:
+            self.page = await self.browser.new_page()
+        logger.info("Browser started with persistent session")
 
     async def _login(self):
         """Login to MMI portal"""
@@ -599,6 +621,7 @@ class MMIAutomation:
 
         # Fill Phone Number (optional)
         if user_data['phone']:
+            phone_filled = False
             phone_selectors = [
                 'input[placeholder*="Phone" i]',
                 'input[name*="phone" i]',
@@ -611,10 +634,27 @@ class MMIAutomation:
                     element = await self.page.query_selector(selector)
                     if element and await element.is_visible():
                         await element.fill(user_data['phone'])
+                        phone_filled = True
                         logger.info(f"Filled Phone with selector: {selector}")
                         break
                 except:
                     continue
+
+            # Try by label proximity
+            if not phone_filled:
+                try:
+                    phone_input = self.page.locator('text="Phone Number" >> xpath=following::input[1]')
+                    if await phone_input.count() > 0:
+                        await phone_input.fill(user_data['phone'])
+                        phone_filled = True
+                        logger.info("Filled Phone via label proximity")
+                except:
+                    pass
+
+            if phone_filled:
+                logger.info(f"Phone filled: {user_data['phone']}")
+            else:
+                logger.warning("Could not find Phone field (optional, continuing)")
 
         # Fill Email Address
         email_filled = False
@@ -638,20 +678,50 @@ class MMIAutomation:
 
         if not email_filled:
             try:
-                await self.page.get_by_label('Email').fill(user_data['email'])
+                await self.page.get_by_label('Email Address').fill(user_data['email'])
                 email_filled = True
             except:
-                try:
-                    await self.page.get_by_label('Email Address').fill(user_data['email'])
+                pass
+
+        # Try finding by label text proximity - find "Email Address" label and get the next input
+        if not email_filled:
+            try:
+                email_input = self.page.locator('text="Email Address" >> xpath=following::input[1]')
+                if await email_input.count() > 0:
+                    await email_input.fill(user_data['email'])
                     email_filled = True
-                except:
-                    pass
+                    logger.info("Filled Email via label proximity")
+            except:
+                pass
+
+        # Try by form field order - Email Address is the 4th visible input in the modal
+        if not email_filled:
+            try:
+                modal_inputs = self.page.locator('.modal input[type="text"], .modal input:not([type])').or_(
+                    self.page.locator('input[type="text"], input:not([type])')
+                )
+                # Get all visible inputs
+                count = await modal_inputs.count()
+                for i in range(count):
+                    inp = modal_inputs.nth(i)
+                    if await inp.is_visible():
+                        val = await inp.input_value()
+                        # Find the first empty input after the phone field
+                        # (First Name, Last Name, Phone are filled; Email is next empty)
+                        if val == '' and i >= 3:
+                            await inp.fill(user_data['email'])
+                            email_filled = True
+                            logger.info(f"Filled Email via input position ({i})")
+                            break
+            except:
+                pass
 
         if not email_filled:
             raise Exception("Could not find Email field")
 
         # Fill NMLS (optional, for Loan Officers)
         if user_data['nmls']:
+            nmls_filled = False
             nmls_selectors = [
                 'input[placeholder*="NMLS" i]',
                 'input[name*="nmls" i]',
@@ -663,10 +733,27 @@ class MMIAutomation:
                     element = await self.page.query_selector(selector)
                     if element and await element.is_visible():
                         await element.fill(user_data['nmls'])
+                        nmls_filled = True
                         logger.info(f"Filled NMLS with selector: {selector}")
                         break
                 except:
                     continue
+
+            # Try by label proximity
+            if not nmls_filled:
+                try:
+                    nmls_input = self.page.locator('text="NMLS" >> xpath=following::input[1]')
+                    if await nmls_input.count() > 0:
+                        await nmls_input.fill(user_data['nmls'])
+                        nmls_filled = True
+                        logger.info("Filled NMLS via label proximity")
+                except:
+                    pass
+
+            if nmls_filled:
+                logger.info(f"NMLS filled: {user_data['nmls']}")
+            else:
+                logger.warning("Could not find NMLS field (optional, continuing)")
 
         # Take screenshot of filled form
         await self.page.screenshot(path='mmi_form_filled.png')
@@ -831,28 +918,52 @@ class MMIAutomation:
         # Take screenshot of result
         await self.page.screenshot(path='mmi_user_created.png')
 
-        # Check for duplicate/error messages
-        page_content = await self.page.content()
-        page_text = page_content.lower()
+        # Check visible text for success/error indicators (not raw HTML source)
+        try:
+            visible_text = await self.page.inner_text('body')
+            visible_text_lower = visible_text.lower()
+        except:
+            visible_text_lower = ''
 
-        # Check for "already exists" or "duplicate" indicators
-        if 'already exists' in page_text or 'duplicate' in page_text:
-            logger.warning("Duplicate user/email detected")
+        # SUCCESS: Look for the "Team member added" success toast first
+        if 'team member added' in visible_text_lower:
+            logger.info("Success toast detected: 'Team member added'")
+            return 'success'
+
+        # SUCCESS: Modal closed and we're back on the Team Members list
+        try:
+            add_btn = await self.page.query_selector('button:has-text("Add Team Member")')
+            if add_btn and await add_btn.is_visible():
+                # We're back on the team list page - modal closed = success
+                modal_visible = False
+                try:
+                    modal = await self.page.query_selector('.modal, [class*="modal"]')
+                    if modal and await modal.is_visible():
+                        modal_visible = True
+                except:
+                    pass
+                if not modal_visible:
+                    logger.info("Success detected: modal closed, back on Team Members page")
+                    return 'success'
+        except:
+            pass
+
+        # DUPLICATE: Check visible text for duplicate/already exists messages
+        if 'already exists' in visible_text_lower or 'duplicate' in visible_text_lower:
+            logger.warning("Duplicate user/email detected in visible text")
             await self.page.screenshot(path='mmi_duplicate_detected.png')
             return 'duplicate_email'
 
-        # Check for email-specific errors
-        if 'email' in page_text and ('in use' in page_text or 'taken' in page_text or 'registered' in page_text):
-            logger.warning("Email already in use detected")
+        if 'email' in visible_text_lower and ('in use' in visible_text_lower or 'taken' in visible_text_lower or 'registered' in visible_text_lower):
+            logger.warning("Email already in use detected in visible text")
             await self.page.screenshot(path='mmi_email_in_use.png')
             return 'duplicate_email'
 
-        # Check for any visible error message elements
+        # Check for visible error toast/alert elements
         error_selectors = [
-            '.error', '.alert-danger', '.alert-error', '[class*="error"]',
-            '.validation-error', '.field-error', '[role="alert"]',
-            '.toast-error', '.notification-error', '[class*="toast"]',
-            '#snackbar.error', '#snackbar'
+            '.toast-error', '.notification-error',
+            '.alert-danger', '.alert-error',
+            '[role="alert"]'
         ]
         for selector in error_selectors:
             try:
@@ -869,24 +980,24 @@ class MMIAutomation:
             except:
                 continue
 
-        # Check for generic failure indicators (not duplicate-specific)
-        generic_error_indicators = ['error', 'failed']
-        for indicator in generic_error_indicators:
-            if indicator in page_text:
-                # Only raise if it's a non-duplicate error
-                logger.warning(f"Generic error indicator found: '{indicator}'")
-                raise Exception(f"User creation may have failed: found '{indicator}' in page")
-
-        logger.info("User created successfully")
+        # If we got here with no clear signal, assume success
+        # (the modal likely closed and the toast already disappeared)
+        logger.info("No error detected - assuming user created successfully")
         return 'success'
 
     async def _cleanup(self):
         """Clean up browser resources"""
         logger.info("Cleaning up browser...")
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        try:
+            if self.browser:
+                await self.browser.close()
+        except:
+            pass
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+        except:
+            pass
         logger.info("Browser closed")
 
 
