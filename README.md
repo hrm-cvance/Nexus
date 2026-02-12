@@ -95,6 +95,7 @@ Each vendor is mapped to an Entra ID security group. When a user is a member of 
 | **CustomTkinter** | Desktop GUI with tabbed workflow |
 | **ReportLab** | PDF provisioning summary generation |
 | **MSAL** | OAuth 2.0 authentication with delegated permissions and persistent token cache |
+| **Win32 API** | Native icon loading (WM_SETICON) for crisp title bar and taskbar icons at all DPI scales |
 
 ## Getting Started
 
@@ -162,7 +163,16 @@ The included build script packages the application into a single executable usin
 build.bat
 ```
 
-This produces `dist/Nexus.exe` with all Python dependencies bundled. Playwright Chromium is installed separately at deployment time to avoid a ~150 MB increase in package size.
+This produces `dist/Nexus.exe` (~111 MB) with all Python dependencies bundled. The build pipeline:
+
+1. Pre-flight checks (Python, PyInstaller)
+2. Cleans previous builds
+3. Resolves package paths (customtkinter)
+4. Generates Windows version metadata from `APP_VERSION` in `main.py`
+5. Runs PyInstaller with icon, version info, and all hidden imports
+6. Reports output size
+
+The exe embeds Windows file properties (right-click → Properties → Details): version number, company name, and product description. Version is maintained in one place (`APP_VERSION` in `main.py`) and flows to the window title bar, exe metadata, and Intune detection rules.
 
 ### Intune Deployment
 
@@ -173,12 +183,22 @@ The `deploy/` directory contains PowerShell scripts for Win32 app deployment:
 | `deploy/install.ps1` | Installs `Nexus.exe`, sets up shared Playwright browser path, creates Start Menu shortcut |
 | `deploy/uninstall.ps1` | Removes application, browsers, environment variables, and shortcuts |
 
-Intune Win32 app configuration:
+**Creating the .intunewin package:**
+
+```bash
+IntuneWinAppUtil.exe -c dist\intune_source -s dist\intune_source\install.ps1 -o dist\intune_output -q
+```
+
+The source folder should contain `Nexus.exe`, `install.ps1`, and `uninstall.ps1`.
+
+**Intune Win32 app configuration:**
 
 | Setting | Value |
 |---|---|
 | Install command | `powershell.exe -ExecutionPolicy Bypass -File install.ps1` |
 | Uninstall command | `powershell.exe -ExecutionPolicy Bypass -File uninstall.ps1` |
+| Install behavior | System |
+| Max install time | 60 minutes |
 | Detection rule | File exists: `C:\Program Files\Nexus\Nexus.exe` |
 
 The install script sets a machine-wide `PLAYWRIGHT_BROWSERS_PATH` environment variable so all users share a single Chromium installation at `C:\ProgramData\Nexus\browsers`.
@@ -238,10 +258,16 @@ Each vendor requires secrets following this pattern:
 Nexus/
 ├── main.py                            # Entry point (supports --install-browsers for deployment)
 ├── requirements.txt                   # Python dependencies
-├── build.bat                          # PyInstaller build script
+├── build.bat                          # PyInstaller build script (6-step: preflight → build → package)
+├── version_info.py                    # Generates Windows exe version metadata from APP_VERSION
 ├── deploy/                            # Intune deployment scripts
 │   ├── install.ps1
 │   └── uninstall.ps1
+├── assets/                            # Application assets
+│   ├── nexus.ico                      # Multi-size icon (16–256px, font-hinted N)
+│   ├── nexus.png                      # 256px reference PNG
+│   ├── nexus.svg                      # SVG source (reference only)
+│   └── generate_icon.py               # Icon generation script (Segoe UI Bold + manual ICO binary)
 ├── config/                            # Application configuration
 │   ├── app_config.example.json        # Template (copy to app_config.json)
 │   └── vendor_mappings.json           # Entra group → vendor automation mappings
@@ -250,7 +276,7 @@ Nexus/
 │   ├── tab_search.py                  # Entra ID user search
 │   ├── tab_provisioning.py            # Vendor selection and user details
 │   ├── tab_automation.py              # Automation runner and status display
-│   └── tab_summary.py                # Results and PDF export
+│   └── tab_summary.py                 # Results and PDF export
 ├── services/                          # Core services
 │   ├── auth_service.py                # MSAL authentication (delegated, persistent token cache)
 │   ├── graph_api.py                   # Microsoft Graph API client

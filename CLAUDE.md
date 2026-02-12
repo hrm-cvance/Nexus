@@ -21,11 +21,17 @@ python main.py
 ```
 main.py                          # Entry point (supports --install-browsers for deployment)
 build.bat                        # PyInstaller build script → dist/Nexus.exe
+version_info.py                  # Generates Windows exe version metadata from APP_VERSION
 deploy/
   install.ps1                    # Intune install script (shared Playwright browser path)
   uninstall.ps1                  # Intune uninstall script
+assets/
+  nexus.ico                      # Multi-size icon (16–256px, font-hinted N)
+  nexus.png                      # 256px reference PNG
+  nexus.svg                      # SVG source (reference only — ICO is generated from font rendering)
+  generate_icon.py               # Icon generation script (Segoe UI Bold + manual ICO binary)
 gui/
-  main_window.py                 # Main CustomTkinter window
+  main_window.py                 # Main CustomTkinter window (Win32 icon loading, version in title)
   tab_search.py                  # User search tab (Entra ID lookup)
   tab_provisioning.py            # Vendor selection & provisioning tab
   tab_automation.py              # Automation runner & status display
@@ -83,9 +89,17 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 
 ## Deployment
 - **Build:** `build.bat` produces `dist/Nexus.exe` via PyInstaller (uses `sys._MEIPASS` for bundled resources)
-- **Intune:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment
+- **Version info:** `version_info.py` reads `APP_VERSION` from `main.py` and generates `version_info.txt` for PyInstaller's `--version-file` flag (embeds File Version, Product Version, Company Name in the exe properties)
+- **Intune:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment; package with `IntuneWinAppUtil.exe`
 - **Playwright browsers:** Shared path via `PLAYWRIGHT_BROWSERS_PATH` env var at `C:\ProgramData\Nexus\browsers`
 - **Config at runtime:** Bundled inside the exe; `config_manager.py` loads from `sys._MEIPASS` when frozen
+
+### Icon & Window Identity
+- `assets/generate_icon.py` renders the N letterform using Segoe UI Bold font hinting at each size independently (not downscaled from SVG)
+- ICO is manually constructed (Pillow's `append_images` doesn't work for ICO format) with 7 PNG frames: 16, 24, 32, 48, 64, 128, 256
+- `main_window.py` uses Win32 `LoadImageW` + `SendMessageW(WM_SETICON)` for proper multi-size icon support (title bar gets ICON_SMALL, taskbar gets ICON_BIG)
+- `SetCurrentProcessExplicitAppUserModelID` ensures the taskbar shows Nexus's icon instead of Python's
+- Version number (`APP_VERSION` from `main.py`) is displayed in the window title bar
 
 ### Authentication & Token Cache
 - `AuthService` uses MSAL's `SerializableTokenCache` to persist tokens to `%LOCALAPPDATA%\Nexus\token_cache.bin`
