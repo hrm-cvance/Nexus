@@ -5,8 +5,10 @@ Handles Microsoft authentication using MSAL with delegated permissions:
 - Interactive browser sign-in (no client secrets)
 - Token management and refresh
 - Single token for both Graph API and Key Vault
+- Persistent token cache for remembering sign-in between sessions
 """
 
+import os
 import msal
 from typing import List, Optional, Dict
 from utils.logger import get_logger
@@ -36,16 +38,45 @@ class AuthService:
         self.redirect_uri = redirect_uri
         self.authority = f"https://login.microsoftonline.com/{tenant_id}"
 
-        # Create MSAL PublicClientApplication (no client secret needed)
+        # Set up persistent token cache
+        self._cache_dir = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "Nexus")
+        self._cache_path = os.path.join(self._cache_dir, "token_cache.bin")
+        self.token_cache = msal.SerializableTokenCache()
+        self._load_cache()
+
+        # Create MSAL PublicClientApplication with persistent cache
         self.msal_app = msal.PublicClientApplication(
             client_id=client_id,
-            authority=self.authority
+            authority=self.authority,
+            token_cache=self.token_cache
         )
 
-        self.token_cache = None
-        self.current_account = None
+        # Restore current account from cache if available
+        accounts = self.msal_app.get_accounts()
+        self.current_account = accounts[0] if accounts else None
 
         logger.info(f"AuthService initialized for tenant {tenant_id}")
+
+    def _load_cache(self):
+        """Load token cache from disk if it exists"""
+        if os.path.exists(self._cache_path):
+            try:
+                with open(self._cache_path, "r") as f:
+                    self.token_cache.deserialize(f.read())
+                logger.info("Token cache loaded from disk")
+            except Exception as e:
+                logger.warning(f"Failed to load token cache: {e}")
+
+    def _save_cache(self):
+        """Save token cache to disk if it has changed"""
+        if self.token_cache.has_state_changed:
+            try:
+                os.makedirs(self._cache_dir, exist_ok=True)
+                with open(self._cache_path, "w") as f:
+                    f.write(self.token_cache.serialize())
+                logger.info("Token cache saved to disk")
+            except Exception as e:
+                logger.warning(f"Failed to save token cache: {e}")
 
     def sign_in_interactive(self, scopes: List[str]) -> Dict:
         """
@@ -84,6 +115,7 @@ class AuthService:
 
             if "access_token" in result:
                 logger.info("Interactive sign-in successful")
+                self._save_cache()
                 accounts = self.msal_app.get_accounts()
                 if accounts:
                     self.current_account = accounts[0]
@@ -132,6 +164,15 @@ class AuthService:
             self.msal_app.remove_account(account)
 
         self.current_account = None
+
+        # Delete the cache file entirely so no tokens persist on disk
+        if os.path.exists(self._cache_path):
+            try:
+                os.remove(self._cache_path)
+                logger.info("Token cache file deleted from disk")
+            except Exception as e:
+                logger.warning(f"Failed to delete token cache file: {e}")
+
         logger.info("Sign-out complete")
 
     def is_authenticated(self) -> bool:
