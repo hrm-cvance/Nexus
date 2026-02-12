@@ -116,7 +116,7 @@ class AccountProvisioningTab:
         # Info message
         info_label = ctk.CTkLabel(
             vendors_frame,
-            text="Vendors detected based on user's group memberships",
+            text="Auto-detected vendors are pre-selected based on group membership",
             font=ctk.CTkFont(size=12),
             text_color="gray"
         )
@@ -258,76 +258,63 @@ class AccountProvisioningTab:
         value_widget.pack(anchor="w")
 
     def _detect_vendors(self):
-        """Detect applicable vendors based on user's group membership"""
+        """Load all enabled vendors; auto-select those matching user's groups"""
         self.detected_vendors = []
         self.selected_vendors = []
 
-        if not self.current_user or not self.current_user.groups:
-            logger.info("No groups found for user")
-            return
+        user_groups = self.current_user.groups if self.current_user else []
+        logger.info(f"User has {len(user_groups)} groups")
+        if user_groups:
+            logger.debug(f"User groups: {[g.display_name for g in user_groups]}")
 
-        logger.info(f"User has {len(self.current_user.groups)} groups")
-        logger.debug(f"User groups: {[g.display_name for g in self.current_user.groups]}")
-
-        # Get vendor mappings
+        # Get all enabled vendor mappings
         mappings = self.config_manager.get_enabled_vendors()
-        logger.info(f"Checking {len(mappings)} vendor mapping(s)")
+        logger.info(f"Loading {len(mappings)} enabled vendor(s)")
 
-        # Check each mapping
+        # Build vendor configs for ALL enabled vendors
         for mapping in mappings:
             group_name = mapping.get('entra_group_name')
-            logger.info(f"Looking for group: '{group_name}'")
+            is_member = (
+                self.current_user is not None
+                and self.current_user.is_member_of(group_name)
+            )
 
-            # Check if user is member of this group
-            if self.current_user.is_member_of(group_name):
-                logger.info(f"✓ MATCH: User is member of '{group_name}' - adding {mapping.get('vendor_name')}")
-
-                # Create basic vendor config (full config will be loaded later)
-                vendor = VendorConfig(
-                    name=mapping.get('vendor_name'),
-                    display_name=mapping.get('vendor_display_name'),
-                    entra_group_name=group_name,
-                    is_auto_detected=True,
-                    is_selected=True  # Auto-select detected vendors
-                )
-                self.detected_vendors.append(vendor)
-                self.selected_vendors.append(vendor.name)
+            if is_member:
+                logger.info(f"✓ MATCH: User is member of '{group_name}' - auto-selecting {mapping.get('vendor_name')}")
             else:
-                logger.info(f"✗ NO MATCH: User is NOT member of '{group_name}'")
+                logger.info(f"✗ NO MATCH: '{group_name}' - showing {mapping.get('vendor_name')} unchecked")
 
-        logger.info(f"Detected {len(self.detected_vendors)} vendor(s)")
+            vendor = VendorConfig(
+                name=mapping.get('vendor_name'),
+                display_name=mapping.get('vendor_display_name'),
+                entra_group_name=group_name,
+                is_auto_detected=is_member,
+                is_selected=is_member
+            )
+            self.detected_vendors.append(vendor)
+            if is_member:
+                self.selected_vendors.append(vendor.name)
+
+        auto_count = len(self.selected_vendors)
+        logger.info(f"Loaded {len(self.detected_vendors)} vendor(s), {auto_count} auto-selected")
 
     def _display_vendors(self):
-        """Display vendor cards"""
+        """Display vendor cards — all enabled vendors shown, auto-detected ones pre-checked"""
         # Clear existing content
         for widget in self.vendors_container.winfo_children():
             widget.destroy()
 
-        # Update count
+        # Update count to show how many were auto-detected
+        auto_count = sum(1 for v in self.detected_vendors if v.is_auto_detected)
         self.vendors_count_label.configure(
-            text=f"({len(self.detected_vendors)} detected)"
+            text=f"({auto_count} auto-detected)"
         )
 
-        if not self.detected_vendors:
-            no_vendors_label = ctk.CTkLabel(
-                self.vendors_container,
-                text="No vendors detected for this user.\n\nThe user is not a member of any vendor provisioning groups.",
-                font=ctk.CTkFont(size=13),
-                text_color="gray"
-            )
-            no_vendors_label.pack(pady=20)
-            self.start_btn.configure(state="disabled")
-            # Still show disabled vendor cards below
-            disabled_mappings = self.config_manager.get_disabled_vendors()
-            for mapping in disabled_mappings:
-                self._create_disabled_vendor_card(mapping)
-            return
-
-        # Create vendor cards
+        # Create vendor cards for all enabled vendors
         for vendor in self.detected_vendors:
             self._create_vendor_card(vendor)
 
-        # Show disabled vendor cards (grayed out)
+        # Show disabled vendor cards (grayed out, e.g. Experience.com)
         disabled_mappings = self.config_manager.get_disabled_vendors()
         for mapping in disabled_mappings:
             self._create_disabled_vendor_card(mapping)

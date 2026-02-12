@@ -206,9 +206,12 @@ class UsernameConflictDialog(ctk.CTkToplevel):
         self.geometry("450x280")
         self.resizable(False, False)
 
-        # Center on parent
+        # Center on parent and force to front (above Playwright browser)
         self.transient(parent)
         self.grab_set()
+        self.attributes('-topmost', True)
+        self.lift()
+        self.focus_force()
 
         self.result = None
 
@@ -329,9 +332,12 @@ class EmailConflictDialog(ctk.CTkToplevel):
         self.geometry("450x280")
         self.resizable(False, False)
 
-        # Center on parent
+        # Center on parent and force to front (above Playwright browser)
         self.transient(parent)
         self.grab_set()
+        self.attributes('-topmost', True)
+        self.lift()
+        self.focus_force()
 
         self.result = None
 
