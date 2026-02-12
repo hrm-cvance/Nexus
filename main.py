@@ -83,7 +83,7 @@ def main():
 
         # Create and run GUI
         logger.info("Launching GUI")
-        app = NexusMainWindow(config_manager)
+        app = NexusMainWindow(config_manager, version=APP_VERSION)
         app.run()
 
     except Exception as e:

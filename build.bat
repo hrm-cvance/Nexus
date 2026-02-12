@@ -57,8 +57,10 @@ echo.
 pyinstaller --onefile ^
     --name "%APP_NAME%" ^
     --windowed ^
+    --icon "assets\nexus.ico" ^
     --add-data "config;config" ^
     --add-data "vendors;vendors" ^
+    --add-data "assets;assets" ^
     --add-data "!CTK_PATH!;customtkinter" ^
     --collect-all playwright ^
     --hidden-import "msal" ^

@@ -8,8 +8,17 @@ Main application window with tabbed interface:
 - Tab 4: Settings (placeholder)
 """
 
+import os
+import sys
+import ctypes
 import customtkinter as ctk
 from services.config_manager import ConfigManager
+
+# Set Windows AppUserModelID so the taskbar shows our icon instead of Python's
+try:
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("HighlandMortgage.Nexus.1.0")
+except Exception:
+    pass
 from services.auth_service import AuthService
 from services.graph_api import GraphAPIClient
 from services.keyvault_service import KeyVaultService
@@ -30,10 +39,11 @@ ctk.set_default_color_theme("blue")
 class NexusMainWindow(ctk.CTk):
     """Main application window"""
 
-    def __init__(self, config_manager: ConfigManager):
+    def __init__(self, config_manager: ConfigManager, version: str = ""):
         super().__init__()
 
         self.config_manager = config_manager
+        self.app_version = version
         logger.info("Initializing Nexus Main Window")
 
         # Validate configuration
@@ -47,7 +57,18 @@ class NexusMainWindow(ctk.CTk):
         self._initialize_services()
 
         # Set up window
-        self.title("Nexus - Automated Vendor Account Provisioning")
+        title = f"Nexus v{self.app_version} - Automated Vendor Account Provisioning" if self.app_version else "Nexus - Automated Vendor Account Provisioning"
+        self.title(title)
+
+        # Set window icon using Win32 API for proper multi-size support.
+        # Tkinter's iconbitmap() only loads one size from the ICO.
+        # Windows needs WM_SETICON with ICON_SMALL (title bar) and ICON_BIG (taskbar)
+        # so it picks the correct resolution frame from the multi-size ICO.
+        base_path = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        icon_path = os.path.join(base_path, "assets", "nexus.ico")
+        if os.path.exists(icon_path):
+            self.iconbitmap(icon_path)  # Fallback for Tk internals
+            self.after(200, lambda: self._set_window_icons(icon_path))
 
         # Set minimum window size
         self.minsize(1200, 900)
@@ -256,6 +277,53 @@ class NexusMainWindow(ctk.CTk):
             command=error_window.destroy
         )
         close_btn.pack(padx=20, pady=20)
+
+    def _set_window_icons(self, icon_path):
+        """Set window icons using Win32 API for proper multi-size ICO support.
+
+        LoadImage reads the ICO file and picks the best frame for the requested
+        size. SendMessage with WM_SETICON tells Windows which icon to use for
+        the title bar (ICON_SMALL) and taskbar/Alt+Tab (ICON_BIG) independently.
+        """
+        try:
+            self.iconbitmap(icon_path)  # Reapply for Tk internals
+
+            hwnd = ctypes.windll.user32.GetParent(self.winfo_id())
+
+            # LoadImage flags
+            IMAGE_ICON = 1
+            LR_LOADFROMFILE = 0x0010
+            LR_DEFAULTSIZE = 0x0040
+
+            # WM_SETICON constants
+            WM_SETICON = 0x0080
+            ICON_SMALL = 0
+            ICON_BIG = 1
+
+            # Get system icon sizes (respects DPI scaling)
+            sm_cxsmicon = ctypes.windll.user32.GetSystemMetrics(49)  # SM_CXSMICON
+            sm_cxicon = ctypes.windll.user32.GetSystemMetrics(11)    # SM_CXICON
+
+            # Load small icon (title bar) — Windows picks best frame for this size
+            hicon_small = ctypes.windll.user32.LoadImageW(
+                0, icon_path, IMAGE_ICON,
+                sm_cxsmicon, sm_cxsmicon, LR_LOADFROMFILE
+            )
+
+            # Load big icon (taskbar, Alt+Tab) — Windows picks best frame for this size
+            hicon_big = ctypes.windll.user32.LoadImageW(
+                0, icon_path, IMAGE_ICON,
+                sm_cxicon, sm_cxicon, LR_LOADFROMFILE
+            )
+
+            if hicon_small:
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_SMALL, hicon_small)
+            if hicon_big:
+                ctypes.windll.user32.SendMessageW(hwnd, WM_SETICON, ICON_BIG, hicon_big)
+
+            logger.info(f"Window icons set via Win32 API (small={sm_cxsmicon}px, big={sm_cxicon}px)")
+        except Exception as e:
+            logger.warning(f"Win32 icon set failed, falling back to iconbitmap: {e}")
 
     def run(self):
         """Run the application"""
