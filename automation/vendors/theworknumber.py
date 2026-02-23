@@ -293,6 +293,49 @@ class TheWorkNumberAutomation:
                 continue
         return None, None
 
+    async def _dismiss_privacy_banner(self):
+        """Dismiss Ketch privacy consent banner if present"""
+        try:
+            close_selectors = [
+                # Ketch banner close/X buttons
+                '[class*="ketch"] [aria-label="Close"]',
+                '[class*="ketch"] button:has(svg)',
+                '[id*="ketch"] [aria-label="Close"]',
+                '[class*="ketch"] svg',
+                # Generic consent/privacy banners
+                '[class*="consent"] [aria-label="Close"]',
+                '[class*="privacy"] button:has(svg)',
+                # Ketch banner specific patterns - the X button with SVG
+                '[class*="ketch-h-6"]',
+                'button:has([class*="ketch"])',
+            ]
+            for selector in close_selectors:
+                try:
+                    elements = await self.page.query_selector_all(selector)
+                    for element in elements:
+                        if element and await element.is_visible():
+                            # Try clicking the element's parent if it's an SVG
+                            tag = await element.evaluate('el => el.tagName')
+                            if tag.lower() == 'svg':
+                                await element.evaluate('el => el.closest("button, a, div[role=button]")?.click()')
+                            else:
+                                await element.click()
+                            logger.info(f"Dismissed privacy banner using: {selector}")
+                            await asyncio.sleep(0.5)
+                            return
+                except:
+                    continue
+
+            # Fallback: try to remove the banner via JavaScript
+            await self.page.evaluate('''() => {
+                const el = document.querySelector('[class*="ketch"], [id*="ketch"]');
+                if (el) { el.remove(); return true; }
+                return false;
+            }''')
+            logger.debug("Privacy banner check complete")
+        except Exception as e:
+            logger.debug(f"Privacy banner check: {e}")
+
     async def _login(self):
         """Login to The Work Number portal via multi-step flow"""
         login_url = self.keyvault.get_vendor_credential('theworknumber', 'login-url')
@@ -306,29 +349,71 @@ class TheWorkNumberAutomation:
         await self.page.goto(login_url)
         await self.page.wait_for_load_state('networkidle')
 
-        # Step 1: Click "Log In" dropdown button
-        logger.info("Clicking Log In dropdown...")
-        await self.page.wait_for_selector('#loginDropdown', timeout=10000)
-        await self.page.click('#loginDropdown')
-        await asyncio.sleep(0.5)
+        # Dismiss Ketch privacy consent banner if present
+        await self._dismiss_privacy_banner()
 
-        # Step 2: Click "Verify for Your Organization" from dropdown
-        logger.info("Clicking 'Verify for Your Organization' from dropdown...")
-        await self.page.click('div.font-weight-bold:has-text("Verify for Your Organization")')
-        await self.page.wait_for_load_state('networkidle')
+        # Take screenshot of landing page for debugging
+        await safe_screenshot(self.page, 'theworknumber_landing_page.png')
 
-        # Step 3: Click "Verify for Your Organization" link (opens new tab)
-        logger.info("Clicking 'Verify for Your Organization' link (opens new tab)...")
+        # Step 1: Click "Log In" button in the top nav
+        logger.info("Looking for Log In button...")
+        login_clicked = False
+        login_selectors = [
+            '#loginDropdown',                                    # Legacy dropdown
+            'a:has-text("Log In")',                              # Nav link
+            'button:has-text("Log In")',                         # Nav button
+            'a[href*="login"]',                                  # Login URL link
+            'a[href*="signin"]',                                 # Sign-in URL link
+            'a:has-text("Sign In")',                             # Alt text
+        ]
+
+        for selector in login_selectors:
+            try:
+                element = await self.page.wait_for_selector(selector, timeout=3000)
+                if element and await element.is_visible():
+                    await element.click()
+                    login_clicked = True
+                    logger.info(f"Clicked login with selector: {selector}")
+                    break
+            except:
+                continue
+
+        if not login_clicked:
+            await safe_screenshot(self.page, 'theworknumber_login_button_not_found.png')
+            raise Exception("Could not find Log In button on the landing page")
+
+        await asyncio.sleep(1)
+        await safe_screenshot(self.page, 'theworknumber_after_login_click.png')
+
+        # Step 2: Look for "Verify for Your Organization" link (may open a new tab)
+        logger.info("Looking for 'Verify for Your Organization'...")
         context = self.page.context
 
-        # Use expect_event to catch the new tab instead of sleeping
-        async with context.expect_event('page', timeout=10000) as new_page_info:
-            await self.page.locator('text="Verify for Your Organization"').first.click()
-        new_page = await new_page_info.value
+        # Check if we need to click through to a verify page, or if we're already on a login form
+        verify_found = False
+        try:
+            verify_element = await self.page.wait_for_selector(
+                'text="Verify for Your Organization"', timeout=5000
+            )
+            if verify_element and await verify_element.is_visible():
+                # This link may open a new tab
+                async with context.expect_event('page', timeout=10000) as new_page_info:
+                    await verify_element.click()
+                new_page = await new_page_info.value
+                self.page = new_page
+                await self.page.bring_to_front()
+                verify_found = True
+                logger.info("Clicked 'Verify for Your Organization' - switched to new tab")
+        except:
+            logger.info("No 'Verify for Your Organization' link found, checking if already on login page")
 
-        self.page = new_page
-        await self.page.bring_to_front()
-        logger.info("Switched to new tab")
+        if not verify_found:
+            # We might already be on the login page or a new tab opened automatically
+            pages = context.pages
+            if len(pages) > 1:
+                self.page = pages[-1]
+                await self.page.bring_to_front()
+                logger.info(f"Switched to latest tab: {self.page.url}")
 
         # Wait for page to load
         logger.info("Waiting for page to fully load...")
@@ -468,19 +553,20 @@ class TheWorkNumberAutomation:
                 await safe_screenshot(self.page, 'theworknumber_mfa_page.png')
 
                 # Click on the email option to receive the code
-                # The button is: <input type="submit" class="btn-challenge" value="c****e@highlandsmortgage.com">
+                # The button may be an <a>, <button>, or <input> styled as a button
                 email_clicked = False
                 email_selectors = [
-                    # The actual button format - input submit with btn-challenge class
+                    # Link/button elements containing an email address (most common)
+                    'a:has-text("@highlandsmortgage")',
+                    'a:has-text("@")',
+                    'button:has-text("@highlandsmortgage")',
+                    'button:has-text("@")',
+                    # Input elements (legacy format)
                     'input.btn-challenge[value*="@"]',
                     'input[type="submit"][value*="@"]',
                     'input#btnEndpoint1',
-                    # Generic submit buttons with email in value
                     'input[value*="highlandsmortgage"]',
-                    # Fallback selectors
-                    'button:has-text("@")',
-                    'input[type="radio"]',
-                    'label:has-text("@")',
+                    'input[value*="@"]',
                 ]
 
                 for frame in self.page.frames:
@@ -492,6 +578,13 @@ class TheWorkNumberAutomation:
                                 elements = await frame.query_selector_all(selector)
                                 for elem in elements:
                                     if elem and await elem.is_visible():
+                                        # Skip "None of the above" links
+                                        try:
+                                            elem_text = await elem.text_content()
+                                            if elem_text and 'none' in elem_text.lower():
+                                                continue
+                                        except:
+                                            pass
                                         await elem.click()
                                         email_clicked = True
                                         print(f"Clicked email option using selector: {selector}")
@@ -503,21 +596,6 @@ class TheWorkNumberAutomation:
                                 break
                     except:
                         continue
-
-                # If still not clicked, try clicking on text containing @ in any frame
-                if not email_clicked:
-                    for frame in self.page.frames:
-                        try:
-                            # Get all text nodes and find one with @
-                            email_element = await frame.query_selector('text=/@.*@/')
-                            if email_element and await email_element.is_visible():
-                                await email_element.click()
-                                email_clicked = True
-                                print("Clicked email via text pattern")
-                                logger.info("Clicked email via text pattern")
-                                break
-                        except:
-                            continue
 
                 if not email_clicked:
                     print("Could not auto-click email button - waiting for manual action")
@@ -596,22 +674,53 @@ class TheWorkNumberAutomation:
                             continue
 
                     if not mfa_still_present:
-                        # MFA modal is gone - verify dashboard is accessible
-                        page_content = await self.page.content()
+                        # MFA modal is gone — check dashboard in main page AND all frames
                         dashboard_keywords = ["New Order", "Order History", "User Management", "Verifiers", "Administration"]
-                        for keyword in dashboard_keywords:
-                            if keyword in page_content:
-                                print(f"MFA completed - modal dismissed and found: {keyword}")
-                                logger.info(f"MFA completed - modal dismissed and found: {keyword}")
-                                await safe_screenshot(self.page, 'theworknumber_mfa_complete.png')
-                                # Wait a moment for page to stabilize
-                                await asyncio.sleep(2)
-                                return
 
-                    # Log progress
+                        # Check main page content
+                        found_keyword = None
+                        try:
+                            page_content = await self.page.content()
+                            for keyword in dashboard_keywords:
+                                if keyword in page_content:
+                                    found_keyword = keyword
+                                    break
+                        except:
+                            pass
+
+                        # Check all frames if not found in main page
+                        if not found_keyword:
+                            for frame in self.page.frames:
+                                try:
+                                    frame_content = await frame.content()
+                                    for keyword in dashboard_keywords:
+                                        if keyword in frame_content:
+                                            found_keyword = keyword
+                                            break
+                                    if found_keyword:
+                                        break
+                                except:
+                                    continue
+
+                        # Also check URL as a fallback indicator
+                        if not found_keyword:
+                            current_url = self.page.url
+                            if 'vsportal' in current_url or 'dashboard' in current_url or 'home' in current_url:
+                                found_keyword = f"URL: {current_url}"
+
+                        if found_keyword:
+                            print(f"MFA completed - modal dismissed, detected: {found_keyword}")
+                            logger.info(f"MFA completed - modal dismissed, detected: {found_keyword}")
+                            await safe_screenshot(self.page, 'theworknumber_mfa_complete.png')
+                            await asyncio.sleep(2)
+                            return
+
+                    # Log progress with diagnostic info
                     if elapsed_time % 30 == 0:
-                        print(f"Still waiting for MFA completion... ({elapsed_time}s elapsed)")
-                        logger.info(f"Still waiting for MFA completion... ({elapsed_time}s elapsed)")
+                        frame_count = len(self.page.frames)
+                        current_url = self.page.url
+                        print(f"Still waiting for MFA completion... ({elapsed_time}s elapsed, {frame_count} frames, URL: {current_url})")
+                        logger.info(f"MFA wait: {elapsed_time}s, mfa_still_present={mfa_still_present}, frames={frame_count}, url={current_url}")
 
                 raise Exception("MFA timeout - user did not complete MFA within 5 minutes")
             else:

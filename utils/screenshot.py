@@ -2,7 +2,7 @@
 Screenshot & Debug File Utility
 
 Provides safe screenshot and HTML debug file saving that:
-- Routes files to a writable directory (%LOCALAPPDATA%\Nexus\screenshots\)
+- Routes files to a writable directory (%LOCALAPPDATA%\\Nexus\\screenshots\\)
 - Never raises exceptions — screenshot failures won't crash automation
 - Creates the output directory automatically on first use
 """
