@@ -7,10 +7,9 @@ Uses Azure Key Vault for secure credential retrieval.
 Process:
 1. Login to BankVOD
 2. Navigate to Authorized Users
-3. Add new authorized user (auto-generated password)
+3. Add new authorized user (auto-generated password, field is read-only at creation)
 4. Detect duplicate user (skip with warning if exists)
-5. Search for the newly created user (validates account was created)
-6. Update user password to HRM default
+5. Search for newly created user and update password to HRM default
 """
 
 import json
@@ -21,6 +20,7 @@ from playwright.async_api import async_playwright, Page, Browser, TimeoutError a
 
 from models.user import EntraUser
 from services.keyvault_service import get_keyvault_service, KeyVaultError
+from services.ai_matcher import AIMatcherService
 from utils.logger import get_logger
 from utils.screenshot import safe_screenshot
 
@@ -53,7 +53,6 @@ class BankVODAutomation:
         self.page: Optional[Page] = None
         self.playwright = None
         self.current_user = None
-        self.auto_generated_password = None
 
     def _load_config(self) -> Dict[str, Any]:
         """Load vendor configuration"""
@@ -108,9 +107,9 @@ class BankVODAutomation:
             await self._click_add_new_user()
             result['messages'].append("✓ Opened new user form")
 
-            # Fill form with auto-generated password
+            # Step 1: Fill form with auto-generated password (password field is read-only at creation)
             await self._fill_user_form(user_data, use_auto_password=True)
-            result['messages'].append("✓ Filled user form with auto-generated password")
+            result['messages'].append("✓ Filled user form")
 
             # Submit form
             await self._submit_form()
@@ -131,46 +130,36 @@ class BankVODAutomation:
                     logger.warning(f"Account creation failed for {user.display_name}: {success_result['message']}")
                     return result
 
-            result['messages'].append(f"✓ User created with auto-generated password: {self.auto_generated_password}")
+            result['success'] = True
+            result['messages'].append(f"✓ User created for {user.display_name}")
             logger.info(f"User created successfully")
 
-            # Mark as successful after initial creation
-            result['success'] = True
-            result['messages'].append(f"✓ Successfully created BankVOD account for {user.display_name}")
-            logger.info(f"Successfully completed BankVOD account creation for {user.display_name}")
+            # Step 2: Update password to HRM default
+            logger.info("Now updating password to HRM default")
 
-            # Step 2 - Update password to HRM default
-            logger.info(f"Now updating password to HRM default")
-
-            # Navigate to search screen first
             await self._navigate_to_search_screen()
             result['messages'].append("✓ Navigated to search screen")
 
-            # Search for the user and update password to HRM default
             await self._search_for_user(user_data['email'])
             result['messages'].append("✓ Found newly created user")
 
-            # Click Update button
             await self._click_update_button()
             result['messages'].append("✓ Opened user update form")
 
-            # Update password to HRM default
             await self._update_password(user_data['default_password'])
-            result['messages'].append("✓ Updated password to HRM default")
+            result['messages'].append("✓ Set password to HRM default")
 
-            # Submit update
             await self._submit_form()
             result['messages'].append("✓ Password update submitted")
 
-            # Wait for success
             update_result = await self._wait_for_success()
 
             if update_result['success']:
-                result['messages'].append(f"✓ Password updated to HRM default")
-                logger.info(f"Successfully updated password to HRM default")
+                result['messages'].append(f"✓ Successfully created BankVOD account for {user.display_name}")
+                logger.info(f"Successfully completed BankVOD account creation for {user.display_name}")
             else:
-                result['errors'].append(f"✗ Password update failed: {update_result['message']}")
-                logger.error(f"Password update failed for {user.display_name}")
+                result['warnings'].append(f"⚠ Password update may have failed: {update_result['message']}. Please verify the password manually in BankVOD.")
+                logger.warning(f"Password update failed for {user.display_name}: {update_result['message']}")
 
         except Exception as e:
             logger.error(f"Error during BankVOD automation: {e}")
@@ -192,29 +181,24 @@ class BankVODAutomation:
         Returns:
             Dict with prepared user data
         """
-        # Get default password from Key Vault
+        # Get HRM default password from Key Vault
         try:
-            default_password = self.keyvault.get_vendor_credential('bankvod', 'newuser-password')
+            default_password = self.keyvault.get_secret('hrm-defaultpassword')
         except KeyVaultError as e:
-            logger.error(f"Failed to retrieve default password from Key Vault: {e}")
+            logger.error(f"Failed to retrieve HRM default password from Key Vault: {e}")
             raise
 
         # Extract cost center from office location OR department
+        # Uses AIMatcherService which strips leading zeros and normalizes to 4 digits
         cost_center = None
         if user.office_location:
-            # Try to extract numbers from office location
-            import re
-            match = re.search(r'\d+', user.office_location)
-            if match:
-                cost_center = match.group()
+            cost_center = AIMatcherService.extract_cost_center(user.office_location)
+            if cost_center:
                 logger.info(f"Extracted cost center: {cost_center} from office location: {user.office_location}")
 
         if not cost_center and user.department:
-            # Try department field
-            import re
-            match = re.search(r'\d+', user.department)
-            if match:
-                cost_center = match.group()
+            cost_center = AIMatcherService.extract_cost_center(user.department)
+            if cost_center:
                 logger.info(f"Extracted cost center: {cost_center} from department: {user.department}")
 
         if not cost_center:
@@ -607,26 +591,14 @@ class BankVODAutomation:
         search_url = self.keyvault.get_vendor_credential('bankvod', 'login-url')
         await self.page.goto(search_url)
         await self.page.wait_for_load_state('networkidle')
+        await self._navigate_to_authorized_users()
         logger.info("Search screen loaded")
 
     async def _search_for_user(self, email: str):
-        """
-        Search for a user by email on the Authorized Users page
-
-        Args:
-            email: User's email address
-        """
+        """Search for a user by email on the Authorized Users page"""
         logger.info(f"Searching for user: {email}")
-
-        # Fill email search field using exact ID
         await self.page.fill('#ContentPlaceHolder1_tb_email', email)
-        logger.info(f"Entered email in search field")
-
-        # Click Search button using exact ID
         await self.page.click('#ContentPlaceHolder1_bt_search')
-        logger.info("Clicked Search button")
-
-        # Wait for results to load
         await asyncio.sleep(2)
         await self.page.wait_for_load_state('networkidle')
         logger.info("Search completed")
@@ -634,38 +606,21 @@ class BankVODAutomation:
     async def _click_update_button(self):
         """Click Update button/link for the user in search results"""
         logger.info("Clicking Update button...")
-
-        # The Update link has onclick="openRadWindow(userId)" pattern
-        # Find link with text "Update" that has openRadWindow onclick
         await self.page.click('a:has-text("Update")[onclick*="openRadWindow"]')
         logger.info("Clicked Update link")
-
-        # Wait for RadWindow modal to appear
         await asyncio.sleep(2)
         await self.page.wait_for_selector('iframe[name*="RadWindow"], iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]', timeout=10000)
         logger.info("Update modal opened")
 
     async def _update_password(self, new_password: str):
-        """
-        Update the password field in the RadWindow modal
-
-        Args:
-            new_password: New password to set
-        """
+        """Update the password field in the RadWindow modal"""
         logger.info("Updating password field...")
-
-        # Get the RadWindow iframe (the update modal is inside an iframe)
         iframe_element = await self.page.query_selector('iframe[name*="RadWindow"], iframe.rwDialog, .RadWindow iframe, iframe[id*="RadWindow"]')
         if not iframe_element:
-            logger.error("Could not find RadWindow iframe for password update")
-            raise Exception("RadWindow iframe not found")
-
+            raise Exception("RadWindow iframe not found for password update")
         iframe = await iframe_element.content_frame()
         if not iframe:
-            logger.error("Could not access iframe content for password update")
             raise Exception("Could not access RadWindow iframe content")
-
-        # Fill password field using exact ID (it's type="text", not type="password")
         await iframe.fill('#t_password', new_password)
         logger.info("Password field updated")
 
