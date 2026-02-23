@@ -67,24 +67,29 @@ try {
     $env:PLAYWRIGHT_BROWSERS_PATH = $BrowserDir
     Write-Log "Set PLAYWRIGHT_BROWSERS_PATH = $BrowserDir (Machine scope)"
 
-    # Install Playwright Chromium browser using the bundled driver
-    Write-Log "Installing Playwright Chromium browser to shared path..."
-    $process = Start-Process -FilePath "$InstallDir\Nexus.exe" `
-        -ArgumentList "--install-browsers" `
-        -NoNewWindow -Wait -PassThru `
-        -RedirectStandardOutput "$env:TEMP\Nexus_browser_install.log" `
-        -RedirectStandardError "$env:TEMP\Nexus_browser_install_err.log"
-
-    $stdout = Get-Content "$env:TEMP\Nexus_browser_install.log" -ErrorAction SilentlyContinue
-    $stderr = Get-Content "$env:TEMP\Nexus_browser_install_err.log" -ErrorAction SilentlyContinue
-
-    if ($stdout) { Write-Log "Browser install output: $stdout" }
-    if ($stderr) { Write-Log "Browser install errors: $stderr" }
-
-    if ($process.ExitCode -ne 0) {
-        Write-Log "WARNING: Browser install exited with code $($process.ExitCode). Users may need to install manually."
+    # Install Playwright Chromium browser (skip if already present)
+    $existingChromium = Get-ChildItem -Path $BrowserDir -Directory -Filter "chromium-*" -ErrorAction SilentlyContinue
+    if ($existingChromium) {
+        Write-Log "Playwright Chromium already installed at $BrowserDir\$($existingChromium.Name) — skipping browser install"
     } else {
-        Write-Log "Playwright Chromium installed successfully to $BrowserDir"
+        Write-Log "Installing Playwright Chromium browser to shared path..."
+        $process = Start-Process -FilePath "$InstallDir\Nexus.exe" `
+            -ArgumentList "--install-browsers" `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput "$env:TEMP\Nexus_browser_install.log" `
+            -RedirectStandardError "$env:TEMP\Nexus_browser_install_err.log"
+
+        $stdout = Get-Content "$env:TEMP\Nexus_browser_install.log" -ErrorAction SilentlyContinue
+        $stderr = Get-Content "$env:TEMP\Nexus_browser_install_err.log" -ErrorAction SilentlyContinue
+
+        if ($stdout) { Write-Log "Browser install output: $stdout" }
+        if ($stderr) { Write-Log "Browser install errors: $stderr" }
+
+        if ($process.ExitCode -ne 0) {
+            Write-Log "WARNING: Browser install exited with code $($process.ExitCode). Users may need to install manually."
+        } else {
+            Write-Log "Playwright Chromium installed successfully to $BrowserDir"
+        }
     }
 
     # Create Start Menu shortcut
