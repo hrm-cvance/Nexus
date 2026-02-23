@@ -71,11 +71,11 @@ class NexusMainWindow(ctk.CTk):
             self.after(200, lambda: self._set_window_icons(icon_path))
 
         # Set minimum window size
-        self.minsize(1200, 900)
+        self.minsize(1024, 700)
 
         # Set initial size and center on screen
         window_width = 1400
-        window_height = 950
+        window_height = 900
         screen_width = self.winfo_screenwidth()
         screen_height = self.winfo_screenheight()
         x = (screen_width - window_width) // 2
@@ -137,7 +137,7 @@ class NexusMainWindow(ctk.CTk):
 
     def _create_header(self):
         """Create header with title and status"""
-        header_frame = ctk.CTkFrame(self, height=60, corner_radius=0)
+        header_frame = ctk.CTkFrame(self, height=45, corner_radius=0)
         header_frame.pack(fill="x", padx=0, pady=0)
         header_frame.pack_propagate(False)
 
@@ -145,23 +145,23 @@ class NexusMainWindow(ctk.CTk):
         title_label = ctk.CTkLabel(
             header_frame,
             text="NEXUS",
-            font=ctk.CTkFont(size=24, weight="bold")
+            font=ctk.CTkFont(size=20, weight="bold")
         )
-        title_label.pack(side="left", padx=20, pady=10)
+        title_label.pack(side="left", padx=20, pady=8)
 
         # Subtitle
         subtitle_label = ctk.CTkLabel(
             header_frame,
             text="Automated Vendor Account Provisioning",
-            font=ctk.CTkFont(size=14)
+            font=ctk.CTkFont(size=13)
         )
-        subtitle_label.pack(side="left", padx=0, pady=10)
+        subtitle_label.pack(side="left", padx=0, pady=8)
 
     def _create_tabs(self):
         """Create tab view"""
         # Create tab view
         self.tabview = ctk.CTkTabview(self)
-        self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
+        self.tabview.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
         # Add tabs
         self.tabview.add("User Search")

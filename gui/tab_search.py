@@ -54,7 +54,7 @@ class UserSearchTab:
         """Create UI components"""
         # Main container
         main_frame = ctk.CTkFrame(self.parent)
-        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        main_frame.pack(fill="both", expand=True, padx=15, pady=10)
 
         # Create sections
         self._create_auth_section(main_frame)
@@ -64,7 +64,7 @@ class UserSearchTab:
     def _create_auth_section(self, parent):
         """Create authentication section"""
         auth_frame = ctk.CTkFrame(parent)
-        auth_frame.pack(fill="x", padx=0, pady=(0, 20))
+        auth_frame.pack(fill="x", padx=0, pady=(0, 10))
 
         # Title
         title_label = ctk.CTkLabel(
@@ -72,11 +72,11 @@ class UserSearchTab:
             text="Microsoft Sign-In",
             font=ctk.CTkFont(size=16, weight="bold")
         )
-        title_label.pack(padx=20, pady=(15, 10), anchor="w")
+        title_label.pack(padx=20, pady=(10, 5), anchor="w")
 
         # Status and button container
         status_frame = ctk.CTkFrame(auth_frame, fg_color="transparent")
-        status_frame.pack(fill="x", padx=20, pady=(0, 15))
+        status_frame.pack(fill="x", padx=20, pady=(0, 10))
 
         # Status indicator with colored dot
         indicator_frame = ctk.CTkFrame(status_frame, fg_color="transparent")
@@ -126,7 +126,7 @@ class UserSearchTab:
     def _create_search_section(self, parent):
         """Create user search section"""
         self.search_frame = ctk.CTkFrame(parent)
-        self.search_frame.pack(fill="x", padx=0, pady=(0, 20))
+        self.search_frame.pack(fill="x", padx=0, pady=(0, 10))
 
         # Title
         title_label = ctk.CTkLabel(
@@ -134,11 +134,11 @@ class UserSearchTab:
             text="User Search",
             font=ctk.CTkFont(size=16, weight="bold")
         )
-        title_label.pack(padx=20, pady=(15, 10), anchor="w")
+        title_label.pack(padx=20, pady=(10, 5), anchor="w")
 
         # Search controls
         controls_frame = ctk.CTkFrame(self.search_frame, fg_color="transparent")
-        controls_frame.pack(fill="x", padx=20, pady=(0, 15))
+        controls_frame.pack(fill="x", padx=20, pady=(0, 10))
 
         # Search type dropdown
         ctk.CTkLabel(controls_frame, text="Search By:").pack(side="left", padx=(0, 10))
@@ -187,7 +187,7 @@ class UserSearchTab:
 
         # Title with result count
         title_frame = ctk.CTkFrame(results_frame, fg_color="transparent")
-        title_frame.pack(fill="x", padx=20, pady=(15, 10))
+        title_frame.pack(fill="x", padx=20, pady=(10, 5))
 
         self.results_title_label = ctk.CTkLabel(
             title_frame,
@@ -204,11 +204,11 @@ class UserSearchTab:
         self.results_count_label.pack(side="left", padx=(10, 0))
 
         # Results scrollable frame
-        self.results_scroll = ctk.CTkScrollableFrame(results_frame, height=300)
-        self.results_scroll.pack(fill="both", expand=True, padx=20, pady=(0, 15))
+        self.results_scroll = ctk.CTkScrollableFrame(results_frame, height=200)
+        self.results_scroll.pack(fill="both", expand=True, padx=20, pady=(0, 5))
 
         # Button frame at bottom (outside scrollable area) - always visible
-        self.button_frame = ctk.CTkFrame(results_container, height=70)
+        self.button_frame = ctk.CTkFrame(results_container, height=55)
         self.button_frame.pack(fill="x", padx=0, pady=0)
         self.button_frame.pack_propagate(False)
 

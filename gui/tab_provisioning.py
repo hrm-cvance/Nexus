@@ -136,9 +136,9 @@ class AccountProvisioningTab:
             actions_frame,
             text="Start Automation →",
             command=self._on_start_automation_clicked,
-            width=200,
-            height=45,
-            font=ctk.CTkFont(size=16, weight="bold"),
+            width=180,
+            height=35,
+            font=ctk.CTkFont(size=14, weight="bold"),
             fg_color="green",
             hover_color="dark green"
         )
@@ -149,8 +149,8 @@ class AccountProvisioningTab:
             actions_frame,
             text="← Back to Search",
             command=self._on_back_clicked,
-            width=150,
-            height=45,
+            width=140,
+            height=35,
             font=ctk.CTkFont(size=14),
             fg_color="gray",
             hover_color="dark gray"
