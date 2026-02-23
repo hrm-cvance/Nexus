@@ -15,6 +15,7 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
+from utils.screenshot import safe_screenshot
 
 # Configure logging
 logger = logging.getLogger('automation.vendors.mmi')
@@ -159,11 +160,8 @@ class MMIAutomation:
             result['success'] = False
 
             # Take error screenshot
-            try:
-                if self.page:
-                    await self.page.screenshot(path=f'mmi_error_{user.display_name.replace(" ", "_")}.png')
-            except:
-                pass
+            if self.page:
+                await safe_screenshot(self.page, f'mmi_error_{user.display_name.replace(" ", "_")}.png')
 
             # Leave browser open on failure so the tech can inspect
             logger.info("Browser left open for inspection after failure")
@@ -254,7 +252,7 @@ class MMIAutomation:
         await self.page.wait_for_load_state('networkidle')
 
         # Take screenshot of initial page
-        await self.page.screenshot(path='mmi_initial_page.png')
+        await safe_screenshot(self.page, 'mmi_initial_page.png')
 
         # Check if we're on a login page or already logged in
         page_content = await self.page.content()
@@ -313,7 +311,7 @@ class MMIAutomation:
                 logger.warning(f"Could not fill password: {e}")
 
             # Take screenshot before clicking login
-            await self.page.screenshot(path='mmi_login_filled.png')
+            await safe_screenshot(self.page, 'mmi_login_filled.png')
 
             # Click login/submit button
             login_clicked = False
@@ -356,7 +354,7 @@ class MMIAutomation:
         await self._handle_mfa()
 
         # Take screenshot after login
-        await self.page.screenshot(path='mmi_after_login.png')
+        await safe_screenshot(self.page, 'mmi_after_login.png')
         logger.info("Login completed")
 
     async def _handle_mfa(self):
@@ -370,7 +368,7 @@ class MMIAutomation:
 
         logger.info("MFA (Two-Factor Authentication) detected")
         print("MFA detected - clicking Send Verification Code...")
-        await self.page.screenshot(path='mmi_mfa_page.png')
+        await safe_screenshot(self.page, 'mmi_mfa_page.png')
 
         # Click "Send Verification Code" button
         try:
@@ -383,7 +381,7 @@ class MMIAutomation:
             print("Could not auto-click Send Verification Code - please click it manually")
 
         await asyncio.sleep(2)
-        await self.page.screenshot(path='mmi_mfa_code_sent.png')
+        await safe_screenshot(self.page, 'mmi_mfa_code_sent.png')
 
         # Wait for user to enter the code and complete MFA
         print("=" * 60)
@@ -431,7 +429,7 @@ class MMIAutomation:
 
             if elapsed_time % 30 == 0:
                 print(f"Still waiting for MFA completion... ({elapsed_time}s elapsed)")
-                await self.page.screenshot(path=f'mmi_mfa_wait_{elapsed_time}s.png')
+                await safe_screenshot(self.page, f'mmi_mfa_wait_{elapsed_time}s.png')
 
         raise Exception("MFA timeout - authentication not completed within 10 minutes")
 
@@ -492,7 +490,7 @@ class MMIAutomation:
         await asyncio.sleep(2)
 
         # Take screenshot
-        await self.page.screenshot(path='mmi_admin_team_page.png')
+        await safe_screenshot(self.page, 'mmi_admin_team_page.png')
         logger.info("Navigated to admin-team page")
 
     async def _click_add_team_member(self):
@@ -501,7 +499,7 @@ class MMIAutomation:
         print("Clicking Add Team Member...")
 
         await asyncio.sleep(1)
-        await self.page.screenshot(path='mmi_before_add_member.png')
+        await safe_screenshot(self.page, 'mmi_before_add_member.png')
 
         # Look for the "Add Team Member" tab or link on the admin-team page
         add_member_clicked = False
@@ -545,12 +543,12 @@ class MMIAutomation:
             if form_visible:
                 logger.info("Add Team Member form already visible")
             else:
-                await self.page.screenshot(path='mmi_add_member_not_found.png')
+                await safe_screenshot(self.page, 'mmi_add_member_not_found.png')
                 raise Exception("Could not find Add Team Member tab/button or form")
 
         # Wait for form to appear
         await asyncio.sleep(1)
-        await self.page.screenshot(path='mmi_add_member_form.png')
+        await safe_screenshot(self.page, 'mmi_add_member_form.png')
         logger.info("Add Team Member form opened")
 
     async def _fill_user_details(self, user_data: Dict[str, Any]):
@@ -756,7 +754,7 @@ class MMIAutomation:
                 logger.warning("Could not find NMLS field (optional, continuing)")
 
         # Take screenshot of filled form
-        await self.page.screenshot(path='mmi_form_filled.png')
+        await safe_screenshot(self.page, 'mmi_form_filled.png')
         logger.info("User details filled")
 
     def _determine_permissions(self) -> list:
@@ -869,7 +867,7 @@ class MMIAutomation:
                 logger.warning(f"Could not find permission checkbox: {permission}")
 
         # Take screenshot of permissions
-        await self.page.screenshot(path='mmi_permissions_set.png')
+        await safe_screenshot(self.page, 'mmi_permissions_set.png')
         logger.info("Permissions set")
 
     async def _create_user(self) -> str:
@@ -883,7 +881,7 @@ class MMIAutomation:
         logger.info("Creating user...")
 
         # Take screenshot before creating
-        await self.page.screenshot(path='mmi_before_create.png')
+        await safe_screenshot(self.page, 'mmi_before_create.png')
 
         # Click Create button - matches: <button class="button button-primary button-md" type="submit">Create</button>
         create_clicked = False
@@ -905,7 +903,7 @@ class MMIAutomation:
                 continue
 
         if not create_clicked:
-            await self.page.screenshot(path='mmi_create_not_found.png')
+            await safe_screenshot(self.page, 'mmi_create_not_found.png')
             raise Exception("Could not find Create button")
 
         # Wait for response
@@ -916,7 +914,7 @@ class MMIAutomation:
         await asyncio.sleep(2)
 
         # Take screenshot of result
-        await self.page.screenshot(path='mmi_user_created.png')
+        await safe_screenshot(self.page, 'mmi_user_created.png')
 
         # Check visible text for success/error indicators (not raw HTML source)
         try:
@@ -951,12 +949,12 @@ class MMIAutomation:
         # DUPLICATE: Check visible text for duplicate/already exists messages
         if 'already exists' in visible_text_lower or 'duplicate' in visible_text_lower:
             logger.warning("Duplicate user/email detected in visible text")
-            await self.page.screenshot(path='mmi_duplicate_detected.png')
+            await safe_screenshot(self.page, 'mmi_duplicate_detected.png')
             return 'duplicate_email'
 
         if 'email' in visible_text_lower and ('in use' in visible_text_lower or 'taken' in visible_text_lower or 'registered' in visible_text_lower):
             logger.warning("Email already in use detected in visible text")
-            await self.page.screenshot(path='mmi_email_in_use.png')
+            await safe_screenshot(self.page, 'mmi_email_in_use.png')
             return 'duplicate_email'
 
         # Check for visible error toast/alert elements
@@ -975,7 +973,7 @@ class MMIAutomation:
                             error_text_lower = error_text.lower().strip()
                             if 'already' in error_text_lower or 'exists' in error_text_lower or 'duplicate' in error_text_lower or 'in use' in error_text_lower:
                                 logger.warning(f"Error element detected: {error_text}")
-                                await self.page.screenshot(path='mmi_error_element.png')
+                                await safe_screenshot(self.page, 'mmi_error_element.png')
                                 return 'duplicate_email'
             except:
                 continue

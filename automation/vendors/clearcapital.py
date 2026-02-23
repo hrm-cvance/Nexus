@@ -26,6 +26,7 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
+from utils.screenshot import safe_screenshot
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -190,11 +191,8 @@ class ClearCapitalAutomation:
             result['success'] = False
 
             # Take error screenshot
-            try:
-                if self.page:
-                    await self.page.screenshot(path=f'clearcapital_error_{user.display_name.replace(" ", "_")}.png')
-            except:
-                pass
+            if self.page:
+                await safe_screenshot(self.page, f'clearcapital_error_{user.display_name.replace(" ", "_")}.png')
 
         finally:
             await self._cleanup()
@@ -362,7 +360,7 @@ class ClearCapitalAutomation:
 
         except Exception as e:
             logger.error(f"Login failed: {e}")
-            await self.page.screenshot(path='clearcapital_login_error.png')
+            await safe_screenshot(self.page, 'clearcapital_login_error.png')
             raise
 
     async def _navigate_to_new_user(self):
@@ -389,7 +387,7 @@ class ClearCapitalAutomation:
 
         except Exception as e:
             logger.error(f"Navigation failed: {e}")
-            await self.page.screenshot(path='clearcapital_navigation_error.png')
+            await safe_screenshot(self.page, 'clearcapital_navigation_error.png')
             raise
 
     async def _fill_user_form(self, user_data: Dict[str, Any]):
@@ -468,7 +466,7 @@ class ClearCapitalAutomation:
 
         except Exception as e:
             logger.error(f"Form filling failed: {e}")
-            await self.page.screenshot(path='clearcapital_form_error.png')
+            await safe_screenshot(self.page, 'clearcapital_form_error.png')
             raise
 
     async def _submit_form(self):
@@ -510,7 +508,7 @@ class ClearCapitalAutomation:
 
         except Exception as e:
             logger.error(f"Form submission failed: {e}")
-            await self.page.screenshot(path='clearcapital_submit_error.png')
+            await safe_screenshot(self.page, 'clearcapital_submit_error.png')
             raise
 
     async def _wait_for_success(self) -> Dict[str, Any]:
@@ -535,9 +533,7 @@ class ClearCapitalAutomation:
 
         # Take a screenshot to capture the result
         try:
-            screenshot_path = Path.home() / 'Desktop' / f'clearcapital_result_{self.current_user.display_name.replace(" ", "_")}.png'
-            await self.page.screenshot(path=str(screenshot_path))
-            logger.info(f"Screenshot saved to: {screenshot_path}")
+            await safe_screenshot(self.page, f'clearcapital_result_{self.current_user.display_name.replace(" ", "_")}.png')
         except Exception as e:
             logger.warning(f"Could not save screenshot: {e}")
 

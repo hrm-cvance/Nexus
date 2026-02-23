@@ -16,6 +16,7 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
 from services.ai_matcher import AIMatcherService
+from utils.screenshot import safe_screenshot, safe_save_debug_html
 
 # Configure logging
 logger = logging.getLogger('automation.vendors.partnerscredit')
@@ -181,11 +182,8 @@ class PartnersCreditAutomation:
             result['success'] = False
 
             # Take error screenshot
-            try:
-                if self.page:
-                    await self.page.screenshot(path=f'partnerscredit_error_{user.display_name.replace(" ", "_")}.png')
-            except:
-                pass
+            if self.page:
+                await safe_screenshot(self.page, f'partnerscredit_error_{user.display_name.replace(" ", "_")}.png')
 
         finally:
             await self._cleanup()
@@ -277,7 +275,7 @@ class PartnersCreditAutomation:
         await self.page.wait_for_load_state('networkidle')
 
         # Take screenshot of login page
-        await self.page.screenshot(path='partnerscredit_login_page.png')
+        await safe_screenshot(self.page, 'partnerscredit_login_page.png')
 
         # Find and fill login form
         await self.page.wait_for_selector('input[type="text"], input[name*="user"], input[id*="user"]', timeout=10000)
@@ -319,7 +317,7 @@ class PartnersCreditAutomation:
         await asyncio.sleep(2)
 
         # Take screenshot after login
-        await self.page.screenshot(path='partnerscredit_after_login.png')
+        await safe_screenshot(self.page, 'partnerscredit_after_login.png')
         logger.info("Login completed")
 
     async def _handle_mfa(self):
@@ -330,7 +328,7 @@ class PartnersCreditAutomation:
         await asyncio.sleep(2)
 
         # Take screenshot to see MFA page
-        await self.page.screenshot(path='partnerscredit_mfa_page.png')
+        await safe_screenshot(self.page, 'partnerscredit_mfa_page.png')
 
         try:
             # Step 1: Handle the public/private computer selection page (SecureAuth)
@@ -347,7 +345,7 @@ class PartnersCreditAutomation:
                 await self.page.wait_for_load_state('networkidle')
                 await asyncio.sleep(2)
 
-                await self.page.screenshot(path='partnerscredit_after_private_select.png')
+                await safe_screenshot(self.page, 'partnerscredit_after_private_select.png')
                 logger.info("Public/private selection completed")
             else:
                 logger.info("No public/private selection page detected, continuing...")
@@ -366,7 +364,7 @@ class PartnersCreditAutomation:
                 await self.page.wait_for_load_state('networkidle')
                 await asyncio.sleep(2)
 
-                await self.page.screenshot(path='partnerscredit_after_email_select.png')
+                await safe_screenshot(self.page, 'partnerscredit_after_email_select.png')
                 logger.info("Email delivery method selected - code sent to admin email")
             else:
                 logger.info("No delivery method selection page detected, continuing...")
@@ -396,7 +394,7 @@ class PartnersCreditAutomation:
                         element = await self.page.query_selector(indicator)
                         if element and await element.is_visible():
                             logger.info(f"✓ MFA completed - found: {indicator}")
-                            await self.page.screenshot(path='partnerscredit_mfa_complete.png')
+                            await safe_screenshot(self.page, 'partnerscredit_mfa_complete.png')
                             return
                     except:
                         continue
@@ -410,7 +408,7 @@ class PartnersCreditAutomation:
 
         except Exception as e:
             logger.error(f"MFA handling error: {e}")
-            await self.page.screenshot(path='partnerscredit_mfa_error.png')
+            await safe_screenshot(self.page, 'partnerscredit_mfa_error.png')
             raise
 
     async def _navigate_to_user_admin(self):
@@ -427,7 +425,7 @@ class PartnersCreditAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot
-        await self.page.screenshot(path='partnerscredit_admin_page.png')
+        await safe_screenshot(self.page, 'partnerscredit_admin_page.png')
         logger.info("Navigated to User Admin")
 
     async def _click_new_user_requests(self):
@@ -440,7 +438,7 @@ class PartnersCreditAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot
-        await self.page.screenshot(path='partnerscredit_new_user_requests.png')
+        await safe_screenshot(self.page, 'partnerscredit_new_user_requests.png')
         logger.info("Clicked New User Requests")
 
     async def _input_number_of_users(self, num_users: int):
@@ -462,7 +460,7 @@ class PartnersCreditAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot of the user form
-        await self.page.screenshot(path='partnerscredit_user_form.png')
+        await safe_screenshot(self.page, 'partnerscredit_user_form.png')
         logger.info("Number of users set, form loaded")
 
     async def _fill_user_form(self, user_data: Dict[str, Any]):
@@ -475,8 +473,7 @@ class PartnersCreditAutomation:
 
         # Save HTML for inspection
         html_content = await self.page.content()
-        with open('partnerscredit_form_html.html', 'w', encoding='utf-8') as f:
-            f.write(html_content)
+        safe_save_debug_html(html_content, 'partnerscredit_form_html.html')
 
         # Fill First Name
         await self.page.fill('#content_ctl00_rpUserEntries_txtFirstName_0', user_data['firstName'])
@@ -524,7 +521,7 @@ class PartnersCreditAutomation:
         logger.info(f"Filled Comments: {user_data['comments']}")
 
         # Take screenshot of filled form
-        await self.page.screenshot(path='partnerscredit_form_filled.png')
+        await safe_screenshot(self.page, 'partnerscredit_form_filled.png')
         logger.info("User form filled")
 
     async def _submit_request(self) -> Dict[str, Any]:
@@ -549,12 +546,11 @@ class PartnersCreditAutomation:
             await asyncio.sleep(3)
 
             # Take screenshot of result
-            await self.page.screenshot(path='partnerscredit_request_submitted.png')
+            await safe_screenshot(self.page, 'partnerscredit_request_submitted.png')
 
             # Save HTML for debugging/inspection
             page_content = await self.page.content()
-            with open('partnerscredit_submit_result.html', 'w', encoding='utf-8') as f:
-                f.write(page_content)
+            safe_save_debug_html(page_content, 'partnerscredit_submit_result.html')
 
             page_lower = page_content.lower()
 
@@ -570,7 +566,7 @@ class PartnersCreditAutomation:
 
             if any(email_duplicate_indicators):
                 logger.warning("Duplicate email detected after submit")
-                await self.page.screenshot(path='partnerscredit_duplicate_email.png')
+                await safe_screenshot(self.page, 'partnerscredit_duplicate_email.png')
                 submit_result['success'] = False
                 submit_result['duplicate_email'] = True
                 submit_result['message'] = 'Email address already in use'
@@ -585,7 +581,7 @@ class PartnersCreditAutomation:
 
             if any(user_duplicate_indicators):
                 logger.warning("Duplicate user detected after submit")
-                await self.page.screenshot(path='partnerscredit_duplicate_user.png')
+                await safe_screenshot(self.page, 'partnerscredit_duplicate_user.png')
                 submit_result['success'] = False
                 submit_result['duplicate_email'] = True  # Treat as email conflict so tech can adjust
                 submit_result['message'] = 'User already exists'
@@ -607,7 +603,7 @@ class PartnersCreditAutomation:
                                 error_lower = error_text.lower().strip()
                                 if any(kw in error_lower for kw in ['already', 'exists', 'duplicate', 'in use', 'taken']):
                                     logger.warning(f"Duplicate indicator in error element: {error_text.strip()}")
-                                    await self.page.screenshot(path='partnerscredit_error_element.png')
+                                    await safe_screenshot(self.page, 'partnerscredit_error_element.png')
                                     submit_result['success'] = False
                                     submit_result['duplicate_email'] = True
                                     submit_result['message'] = error_text.strip()
@@ -624,7 +620,7 @@ class PartnersCreditAutomation:
 
         except Exception as e:
             logger.error(f"Submit failed: {e}")
-            await self.page.screenshot(path='partnerscredit_submit_error.png')
+            await safe_screenshot(self.page, 'partnerscredit_submit_error.png')
             submit_result['success'] = False
             submit_result['message'] = str(e)
 
@@ -649,7 +645,7 @@ class PartnersCreditAutomation:
         await self.page.press(email_selector, 'Tab')
         await asyncio.sleep(0.5)
 
-        await self.page.screenshot(path='partnerscredit_email_updated.png')
+        await safe_screenshot(self.page, 'partnerscredit_email_updated.png')
         logger.info(f"Email field updated to: {new_email}")
 
     async def _cleanup(self):

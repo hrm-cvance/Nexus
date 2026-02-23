@@ -22,6 +22,7 @@ from playwright.async_api import async_playwright, Page, Browser, TimeoutError a
 from models.user import EntraUser
 from services.keyvault_service import get_keyvault_service, KeyVaultError
 from utils.logger import get_logger
+from utils.screenshot import safe_screenshot
 
 logger = get_logger(__name__)
 
@@ -290,7 +291,7 @@ class BankVODAutomation:
             logger.info("Clicked Submit button")
         except Exception as e:
             logger.error(f"Failed to click Submit button: {e}")
-            await self.page.screenshot(path=f'bankvod_login_error_{self.current_user.user_principal_name if self.current_user else "unknown"}.png')
+            await safe_screenshot(self.page, f'bankvod_login_error_{self.current_user.user_principal_name if self.current_user else "unknown"}.png')
             raise
 
         # Wait for navigation
@@ -345,7 +346,7 @@ class BankVODAutomation:
             logger.info("RadWindow iframe found")
         except Exception as e:
             logger.error(f"RadWindow iframe not found: {e}")
-            await self.page.screenshot(path='radwindow_not_found.png')
+            await safe_screenshot(self.page, 'radwindow_not_found.png')
             raise Exception("RadWindow modal did not open")
 
     async def _fill_user_form(self, user_data: Dict[str, Any], use_auto_password: bool = False):
@@ -485,9 +486,7 @@ class BankVODAutomation:
 
         # Take a screenshot to capture the result
         try:
-            screenshot_path = Path.home() / 'Desktop' / f'bankvod_result_{self.current_user.display_name.replace(" ", "_")}.png'
-            await self.page.screenshot(path=str(screenshot_path))
-            logger.info(f"Screenshot saved to: {screenshot_path}")
+            await safe_screenshot(self.page, f'bankvod_result_{self.current_user.display_name.replace(" ", "_")}.png')
         except Exception as e:
             logger.warning(f"Could not save screenshot: {e}")
 

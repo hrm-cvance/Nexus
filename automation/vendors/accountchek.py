@@ -15,6 +15,7 @@ from models.user import EntraUser
 from services.ai_matcher import AIMatcherService
 from services.keyvault_service import get_keyvault_service, KeyVaultError
 from utils.logger import get_logger
+from utils.screenshot import safe_screenshot
 
 logger = get_logger(__name__)
 
@@ -456,9 +457,7 @@ class AccountChekAutomation:
 
         # Take a screenshot to capture the result
         try:
-            screenshot_path = Path.home() / 'Desktop' / f'accountchek_result_{self.current_user.display_name.replace(" ", "_")}.png'
-            await self.page.screenshot(path=str(screenshot_path))
-            logger.info(f"Screenshot saved to: {screenshot_path}")
+            await safe_screenshot(self.page, f'accountchek_result_{self.current_user.display_name.replace(" ", "_")}.png')
         except Exception as e:
             logger.warning(f"Could not save screenshot: {e}")
 

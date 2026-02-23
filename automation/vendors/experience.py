@@ -27,6 +27,7 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
+from utils.screenshot import safe_screenshot
 
 # Configure logging
 logger = logging.getLogger('automation.vendors.experience')
@@ -118,8 +119,7 @@ class ExperienceAutomation:
         """Take a screenshot with numbered prefix"""
         self.screenshot_counter += 1
         filename = f'experience_{self.screenshot_counter:02d}_{name}.png'
-        await self.page.screenshot(path=filename)
-        logger.debug(f"Screenshot: {filename}")
+        await safe_screenshot(self.page, filename)
 
     async def _wait_for_loading(self, timeout: int = 30):
         """Wait for any loading spinners to disappear"""

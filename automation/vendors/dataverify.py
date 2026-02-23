@@ -8,11 +8,11 @@ following the username convention: First initial + Last name (e.g., THurley)
 import asyncio
 import json
 import logging
-from pathlib import Path
 from typing import Dict, Any, Optional, Callable, Awaitable
 from playwright.async_api import async_playwright, Page
 
 from models.user import EntraUser
+from utils.screenshot import safe_screenshot, safe_save_debug_html
 
 # Configure logging
 logging.basicConfig(
@@ -186,11 +186,8 @@ class DataVerifyAutomation:
             result['success'] = False
 
             # Take error screenshot
-            try:
-                if self.page:
-                    await self.page.screenshot(path=f'dataverify_error_{user.display_name.replace(" ", "_")}.png')
-            except:
-                pass
+            if self.page:
+                await safe_screenshot(self.page, f'dataverify_error_{user.display_name.replace(" ", "_")}.png')
 
         finally:
             await self._cleanup()
@@ -287,8 +284,7 @@ class DataVerifyAutomation:
 
         try:
             # Take screenshot of login page to inspect
-            await self.page.screenshot(path='dataverify_login_page.png')
-            logger.info("Screenshot saved: dataverify_login_page.png")
+            await safe_screenshot(self.page, 'dataverify_login_page.png')
 
             # Get the actual field names from the page
             username_field = await self.page.query_selector('input[type="text"]')
@@ -322,8 +318,7 @@ class DataVerifyAutomation:
             logger.info(f"Password length after fill: {len(password_value) if password_value else 0}")
 
             # Take screenshot before clicking login
-            await self.page.screenshot(path='dataverify_before_login.png')
-            logger.info("Screenshot before login saved")
+            await safe_screenshot(self.page, 'dataverify_before_login.png')
 
             # Click login button
             await self.page.click('input[type="submit"], button[type="submit"]')
@@ -337,21 +332,21 @@ class DataVerifyAutomation:
             error_message = await self.page.query_selector('text="Please enter a valid Username and Password."')
             if error_message:
                 logger.error("Login failed - invalid credentials")
-                await self.page.screenshot(path='dataverify_login_error.png')
+                await safe_screenshot(self.page, 'dataverify_login_error.png')
                 raise Exception("Invalid username or password. Please check your Key Vault credentials.")
 
             # Check if we're still on login page
             still_on_login = await self.page.query_selector('text="ACCOUNT LOGIN"')
             if still_on_login:
                 logger.error("Still on login page after login attempt")
-                await self.page.screenshot(path='dataverify_login_error.png')
+                await safe_screenshot(self.page, 'dataverify_login_error.png')
                 raise Exception("Login failed - still on login page")
 
             logger.info("✓ Login successful")
 
         except Exception as e:
             logger.error(f"Login failed: {e}")
-            await self.page.screenshot(path='dataverify_login_error.png')
+            await safe_screenshot(self.page, 'dataverify_login_error.png')
             raise
 
     async def _navigate_to_user_manager(self):
@@ -368,7 +363,7 @@ class DataVerifyAutomation:
 
         except Exception as e:
             logger.error(f"Navigation failed: {e}")
-            await self.page.screenshot(path='dataverify_navigation_error.png')
+            await safe_screenshot(self.page, 'dataverify_navigation_error.png')
             raise
 
     async def _click_add_new_user(self):
@@ -381,8 +376,7 @@ class DataVerifyAutomation:
             await asyncio.sleep(1)
 
             # Take screenshot before clicking
-            await self.page.screenshot(path='dataverify_before_add_user.png')
-            logger.info("Screenshot before Add New User saved")
+            await safe_screenshot(self.page, 'dataverify_before_add_user.png')
 
             # Search for the button in the HTML
             button_html = await self.page.evaluate('''() => {
@@ -420,17 +414,16 @@ class DataVerifyAutomation:
             await asyncio.sleep(1)
 
             # Take screenshot of the add user form
-            await self.page.screenshot(path='dataverify_add_user_form.png')
+            await safe_screenshot(self.page, 'dataverify_add_user_form.png')
 
             # Save HTML for inspection
             form_html = await self.page.content()
-            with open('dataverify_add_user_form.html', 'w', encoding='utf-8') as f:
-                f.write(form_html)
+            safe_save_debug_html(form_html, 'dataverify_add_user_form.html')
             logger.info("Add user form loaded and saved")
 
         except Exception as e:
             logger.error(f"Failed to click Add New User: {e}")
-            await self.page.screenshot(path='dataverify_add_user_error.png')
+            await safe_screenshot(self.page, 'dataverify_add_user_error.png')
             raise
 
     async def _fill_user_form(self, user_data: Dict[str, Any]):
@@ -531,7 +524,7 @@ class DataVerifyAutomation:
 
         except Exception as e:
             logger.error(f"Form filling failed: {e}")
-            await self.page.screenshot(path='dataverify_form_error.png')
+            await safe_screenshot(self.page, 'dataverify_form_error.png')
             raise
 
     async def _submit_form(self, user_data: Dict[str, Any]) -> str:
@@ -551,8 +544,7 @@ class DataVerifyAutomation:
 
         try:
             # Take screenshot before submitting
-            await self.page.screenshot(path='dataverify_before_submit.png')
-            logger.info("Screenshot before submit saved")
+            await safe_screenshot(self.page, 'dataverify_before_submit.png')
 
             # Look for save/submit button using JavaScript
             submit_result = await self.page.evaluate('''() => {
@@ -589,14 +581,14 @@ class DataVerifyAutomation:
             duplicate_username_error = await self.page.query_selector('text="ERROR: The chosen username is already in use. Please select another username."')
             if duplicate_username_error:
                 logger.warning("Duplicate username detected")
-                await self.page.screenshot(path='dataverify_duplicate_username.png')
+                await safe_screenshot(self.page, 'dataverify_duplicate_username.png')
                 return 'duplicate_username'
 
             # Check for duplicate first/last name warning
             duplicate_name_warning = await self.page.query_selector('text="Another user with the same First and Last Name combination already exists within your company."')
             if duplicate_name_warning:
                 logger.warning("Duplicate first/last name detected")
-                await self.page.screenshot(path='dataverify_duplicate_name.png')
+                await safe_screenshot(self.page, 'dataverify_duplicate_name.png')
 
                 # Prompt user for confirmation
                 if self.on_duplicate_name_confirm:
@@ -607,8 +599,7 @@ class DataVerifyAutomation:
                         # Button HTML: <button class="btn-small w230 mt-1">&nbsp;&nbsp; Create A New User </button>
 
                         # Take screenshot before clicking
-                        await self.page.screenshot(path='dataverify_before_create_new_user.png')
-                        logger.info("Screenshot saved before Create A New User click")
+                        await safe_screenshot(self.page, 'dataverify_before_create_new_user.png')
 
                         clicked = False
 
@@ -672,14 +663,13 @@ class DataVerifyAutomation:
 
                         if not clicked:
                             logger.error("All methods to click Create A New User button failed!")
-                            await self.page.screenshot(path='dataverify_create_button_failed.png')
+                            await safe_screenshot(self.page, 'dataverify_create_button_failed.png')
 
                         # Wait for the page to process
                         await asyncio.sleep(3)
 
                         # Take screenshot after clicking
-                        await self.page.screenshot(path='dataverify_after_create_new_user.png')
-                        logger.info("Screenshot saved after Create A New User click")
+                        await safe_screenshot(self.page, 'dataverify_after_create_new_user.png')
 
                         try:
                             await self.page.wait_for_load_state('networkidle', timeout=15000)
@@ -703,7 +693,7 @@ class DataVerifyAutomation:
 
         except Exception as e:
             logger.error(f"Form submission failed: {e}")
-            await self.page.screenshot(path='dataverify_submit_error.png')
+            await safe_screenshot(self.page, 'dataverify_submit_error.png')
             raise
 
     async def _wait_for_success(self) -> Dict[str, Any]:
@@ -726,12 +716,7 @@ class DataVerifyAutomation:
         await asyncio.sleep(3)
 
         # Take screenshot
-        try:
-            screenshot_path = Path.home() / 'Desktop' / f'dataverify_result_{self.current_user.display_name.replace(" ", "_")}.png'
-            await self.page.screenshot(path=str(screenshot_path))
-            logger.info(f"Screenshot saved to: {screenshot_path}")
-        except Exception as e:
-            logger.warning(f"Could not save screenshot: {e}")
+        await safe_screenshot(self.page, f'dataverify_result_{self.current_user.display_name.replace(" ", "_")}.png')
 
         try:
             # Check current URL
@@ -792,7 +777,7 @@ class DataVerifyAutomation:
             logger.info("Retrieved default password from Key Vault")
 
             # Take screenshot before filling password
-            await self.page.screenshot(path='dataverify_password_reset_page.png')
+            await safe_screenshot(self.page, 'dataverify_password_reset_page.png')
 
             # Fill password field
             password_field = self.page.locator('input[name="password"]')
@@ -820,12 +805,12 @@ class DataVerifyAutomation:
                 pass
 
             # Take screenshot after saving password
-            await self.page.screenshot(path='dataverify_password_saved.png')
+            await safe_screenshot(self.page, 'dataverify_password_saved.png')
             logger.info("Password saved successfully")
 
         except Exception as e:
             logger.error(f"Failed to handle password reset: {e}")
-            await self.page.screenshot(path='dataverify_password_error.png')
+            await safe_screenshot(self.page, 'dataverify_password_error.png')
             raise
 
 

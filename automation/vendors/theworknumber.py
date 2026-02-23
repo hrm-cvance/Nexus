@@ -15,6 +15,7 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
+from utils.screenshot import safe_screenshot
 
 # Configure logging
 logger = logging.getLogger('automation.vendors.theworknumber')
@@ -222,11 +223,8 @@ class TheWorkNumberAutomation:
             result['success'] = False
 
             # Take error screenshot
-            try:
-                if self.page:
-                    await self.page.screenshot(path=f'theworknumber_error_{user.display_name.replace(" ", "_")}.png')
-            except:
-                pass
+            if self.page:
+                await safe_screenshot(self.page, f'theworknumber_error_{user.display_name.replace(" ", "_")}.png')
 
         finally:
             await self._cleanup()
@@ -467,7 +465,7 @@ class TheWorkNumberAutomation:
                 print("MFA identity validation detected - waiting for user to complete")
 
                 # Take screenshot
-                await self.page.screenshot(path='theworknumber_mfa_page.png')
+                await safe_screenshot(self.page, 'theworknumber_mfa_page.png')
 
                 # Click on the email option to receive the code
                 # The button is: <input type="submit" class="btn-challenge" value="c****e@highlandsmortgage.com">
@@ -557,7 +555,7 @@ class TheWorkNumberAutomation:
                 await asyncio.sleep(2)
 
                 # Take screenshot after clicking email
-                await self.page.screenshot(path='theworknumber_mfa_code_sent.png')
+                await safe_screenshot(self.page, 'theworknumber_mfa_code_sent.png')
 
                 # Wait for user to manually enter the code
                 print("=" * 60)
@@ -580,7 +578,7 @@ class TheWorkNumberAutomation:
 
                     # Take periodic screenshots
                     if elapsed_time % 15 == 0:
-                        await self.page.screenshot(path=f'theworknumber_mfa_wait_{elapsed_time}s.png')
+                        await safe_screenshot(self.page, f'theworknumber_mfa_wait_{elapsed_time}s.png')
 
                     # Check if MFA modal is still present by looking for MFA keywords in frames
                     mfa_still_present = False
@@ -605,7 +603,7 @@ class TheWorkNumberAutomation:
                             if keyword in page_content:
                                 print(f"MFA completed - modal dismissed and found: {keyword}")
                                 logger.info(f"MFA completed - modal dismissed and found: {keyword}")
-                                await self.page.screenshot(path='theworknumber_mfa_complete.png')
+                                await safe_screenshot(self.page, 'theworknumber_mfa_complete.png')
                                 # Wait a moment for page to stabilize
                                 await asyncio.sleep(2)
                                 return
@@ -701,7 +699,7 @@ class TheWorkNumberAutomation:
         await self._dismiss_tour()
 
         # Take screenshot
-        await self.page.screenshot(path='theworknumber_user_management.png')
+        await safe_screenshot(self.page, 'theworknumber_user_management.png')
         logger.info("Navigated to User Management")
 
     async def _dismiss_tour(self):
@@ -832,13 +830,13 @@ class TheWorkNumberAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot before clicking Add User
-        await self.page.screenshot(path='theworknumber_before_add_user.png')
+        await safe_screenshot(self.page, 'theworknumber_before_add_user.png')
 
         # First, dismiss any tour popups that may be blocking
         await self._dismiss_tour()
 
         # Take screenshot after dismissing tour
-        await self.page.screenshot(path='theworknumber_after_tour_dismiss.png')
+        await safe_screenshot(self.page, 'theworknumber_after_tour_dismiss.png')
 
         # Wait for any loading spinner to disappear
         print("Waiting for page to finish loading...")
@@ -870,7 +868,7 @@ class TheWorkNumberAutomation:
                 continue
 
         if not add_user_clicked:
-            await self.page.screenshot(path='theworknumber_add_user_not_found.png')
+            await safe_screenshot(self.page, 'theworknumber_add_user_not_found.png')
             raise Exception("Could not find Add User button")
 
         try:
@@ -880,7 +878,7 @@ class TheWorkNumberAutomation:
         await asyncio.sleep(2)
 
         # Take screenshot
-        await self.page.screenshot(path='theworknumber_add_user_form.png')
+        await safe_screenshot(self.page, 'theworknumber_add_user_form.png')
         logger.info("Add User form opened")
 
     async def _fill_user_details(self, user_data: Dict[str, Any]):
@@ -924,7 +922,7 @@ class TheWorkNumberAutomation:
             raise Exception("Could not find Email field")
 
         # Take screenshot of filled form
-        await self.page.screenshot(path='theworknumber_form_filled.png')
+        await safe_screenshot(self.page, 'theworknumber_form_filled.png')
         logger.info("User details filled")
 
     async def _click_back(self):
@@ -944,7 +942,7 @@ class TheWorkNumberAutomation:
                 raise Exception("Could not find Back button")
 
         await asyncio.sleep(1)
-        await self.page.screenshot(path='theworknumber_back_to_form.png')
+        await safe_screenshot(self.page, 'theworknumber_back_to_form.png')
         logger.info("Returned to user details form")
 
     async def _update_username_field(self, new_username: str):
@@ -981,7 +979,7 @@ class TheWorkNumberAutomation:
             logger.error(f"Could not update Email: {e}")
             raise Exception("Could not find Email field to update")
 
-        await self.page.screenshot(path='theworknumber_email_updated.png')
+        await safe_screenshot(self.page, 'theworknumber_email_updated.png')
 
     async def _dismiss_snackbar(self):
         """Dismiss any visible snackbar toast (e.g. 'User already exists' from a previous attempt)"""
@@ -1036,7 +1034,7 @@ class TheWorkNumberAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot
-        await self.page.screenshot(path='theworknumber_organization_page.png')
+        await safe_screenshot(self.page, 'theworknumber_organization_page.png')
         logger.info("Clicked Continue, now on Organization & Location page")
 
     async def _select_organization(self):
@@ -1077,7 +1075,7 @@ class TheWorkNumberAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot
-        await self.page.screenshot(path='theworknumber_org_selected.png')
+        await safe_screenshot(self.page, 'theworknumber_org_selected.png')
         logger.info(f"Selected organization: {org_name}")
 
     async def _select_location(self):
@@ -1109,7 +1107,7 @@ class TheWorkNumberAutomation:
         await asyncio.sleep(1)
 
         # Take screenshot
-        await self.page.screenshot(path='theworknumber_location_selected.png')
+        await safe_screenshot(self.page, 'theworknumber_location_selected.png')
         logger.info(f"Selected location: {loc_name}")
 
     async def _create_user(self, user_data: Dict[str, Any]) -> str:
@@ -1148,7 +1146,7 @@ class TheWorkNumberAutomation:
         await asyncio.sleep(2)
 
         # Take screenshot of result
-        await self.page.screenshot(path='theworknumber_create_result.png')
+        await safe_screenshot(self.page, 'theworknumber_create_result.png')
 
         # Check for duplicate/error messages
         page_content = await self.page.content()
@@ -1157,25 +1155,25 @@ class TheWorkNumberAutomation:
         # Check for "User already exists" error (shown in snackbar toast)
         if 'user already exists' in page_text:
             logger.warning("User already exists error detected")
-            await self.page.screenshot(path='theworknumber_user_exists.png')
+            await safe_screenshot(self.page, 'theworknumber_user_exists.png')
             return 'duplicate_email'
 
         # Check for generic "issue creating user" error
         if 'there was an issue creating the user' in page_text or 'issue creating the user' in page_text:
             logger.warning("Generic user creation error detected - likely duplicate")
-            await self.page.screenshot(path='theworknumber_create_error.png')
+            await safe_screenshot(self.page, 'theworknumber_create_error.png')
             return 'duplicate_email'
 
         # Check for username already exists error
         if 'username' in page_text and ('already' in page_text or 'exists' in page_text or 'in use' in page_text or 'taken' in page_text):
             logger.warning("Duplicate username detected")
-            await self.page.screenshot(path='theworknumber_duplicate_username.png')
+            await safe_screenshot(self.page, 'theworknumber_duplicate_username.png')
             return 'duplicate_username'
 
         # Check for email already exists error
         if 'email' in page_text and ('already' in page_text or 'exists' in page_text or 'in use' in page_text or 'taken' in page_text):
             logger.warning("Duplicate email detected")
-            await self.page.screenshot(path='theworknumber_duplicate_email.png')
+            await safe_screenshot(self.page, 'theworknumber_duplicate_email.png')
             return 'duplicate_email'
 
         # Check for snackbar error toast specifically
@@ -1185,7 +1183,7 @@ class TheWorkNumberAutomation:
                 snackbar_text = await snackbar.text_content()
                 if snackbar_text:
                     logger.warning(f"Snackbar error detected: {snackbar_text}")
-                    await self.page.screenshot(path='theworknumber_snackbar_error.png')
+                    await safe_screenshot(self.page, 'theworknumber_snackbar_error.png')
                     if 'already exists' in snackbar_text.lower():
                         return 'duplicate_email'
         except Exception as e:
@@ -1208,7 +1206,7 @@ class TheWorkNumberAutomation:
                             # Check for generic "issue creating" error
                             if 'issue creating' in error_text_lower or 'error creating' in error_text_lower or 'already exists' in error_text_lower:
                                 logger.warning(f"Creation error detected: {error_text}")
-                                await self.page.screenshot(path='theworknumber_create_error.png')
+                                await safe_screenshot(self.page, 'theworknumber_create_error.png')
                                 return 'duplicate_email'
                             if 'username' in error_text_lower:
                                 logger.warning(f"Username error detected: {error_text}")
@@ -1220,7 +1218,7 @@ class TheWorkNumberAutomation:
                 continue
 
         # Take screenshot of confirmation
-        await self.page.screenshot(path='theworknumber_user_created.png')
+        await safe_screenshot(self.page, 'theworknumber_user_created.png')
         logger.info("User created successfully")
         return 'success'
 

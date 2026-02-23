@@ -15,6 +15,7 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
+from utils.screenshot import safe_screenshot, safe_save_debug_html
 
 # Configure logging
 logger = logging.getLogger('automation.vendors.certifiedcredit')
@@ -176,13 +177,10 @@ class CertifiedCreditAutomation:
             result['success'] = False
 
             # Take error screenshot
-            try:
-                if self.popup:
-                    await self.popup.screenshot(path=f'certifiedcredit_error_{user.display_name.replace(" ", "_")}.png')
-                elif self.page:
-                    await self.page.screenshot(path=f'certifiedcredit_error_{user.display_name.replace(" ", "_")}.png')
-            except:
-                pass
+            if self.popup:
+                await safe_screenshot(self.popup, f'certifiedcredit_error_{user.display_name.replace(" ", "_")}.png')
+            elif self.page:
+                await safe_screenshot(self.page, f'certifiedcredit_error_{user.display_name.replace(" ", "_")}.png')
 
         finally:
             await self._cleanup()
@@ -266,8 +264,7 @@ class CertifiedCreditAutomation:
 
         try:
             # Take screenshot of login page
-            await self.page.screenshot(path='certifiedcredit_login_page.png')
-            logger.info("Screenshot saved: certifiedcredit_login_page.png")
+            await safe_screenshot(self.page, 'certifiedcredit_login_page.png')
 
             # Wait for login form
             await self.page.wait_for_selector('input[type="text"], input[name*="user"], input[name*="User"]', timeout=10000)
@@ -282,11 +279,10 @@ class CertifiedCreditAutomation:
 
             # Save HTML for inspection
             page_html = await self.page.content()
-            with open('certifiedcredit_login_page.html', 'w', encoding='utf-8') as f:
-                f.write(page_html)
+            safe_save_debug_html(page_html, 'certifiedcredit_login_page.html')
 
             # Take screenshot before clicking login
-            await self.page.screenshot(path='certifiedcredit_before_login.png')
+            await safe_screenshot(self.page, 'certifiedcredit_before_login.png')
 
             # Click login button (image element)
             await self.page.click('img#btnLogin')
@@ -300,7 +296,7 @@ class CertifiedCreditAutomation:
 
         except Exception as e:
             logger.error(f"Login failed: {e}")
-            await self.page.screenshot(path='certifiedcredit_login_error.png')
+            await safe_screenshot(self.page, 'certifiedcredit_login_error.png')
             raise
 
     async def _wait_for_mfa_completion(self):
@@ -322,8 +318,7 @@ class CertifiedCreditAutomation:
         success_indicators = mfa_config['detection']['success_indicators']
 
         # Take screenshot to see current page
-        await self.page.screenshot(path='certifiedcredit_after_login.png')
-        logger.info("Screenshot after login saved")
+        await safe_screenshot(self.page, 'certifiedcredit_after_login.png')
 
         # Check if we're already on the home page (no MFA required)
         try:
@@ -350,7 +345,7 @@ class CertifiedCreditAutomation:
                     element = await self.page.query_selector(indicator)
                     if element and await element.is_visible():
                         logger.info(f"✓ MFA completed - detected: {indicator}")
-                        await self.page.screenshot(path='certifiedcredit_mfa_complete.png')
+                        await safe_screenshot(self.page, 'certifiedcredit_mfa_complete.png')
                         return
             except Exception as e:
                 logger.debug(f"Error checking for success indicators: {e}")
@@ -361,7 +356,7 @@ class CertifiedCreditAutomation:
 
         # Timeout reached
         logger.error(f"MFA timeout after {max_wait_time} seconds")
-        await self.page.screenshot(path='certifiedcredit_mfa_timeout.png')
+        await safe_screenshot(self.page, 'certifiedcredit_mfa_timeout.png')
         raise TimeoutError("MFA completion timeout - please complete authentication within the time limit")
 
     async def _navigate_to_user_setup(self):
@@ -370,7 +365,7 @@ class CertifiedCreditAutomation:
 
         try:
             # Take screenshot of home page
-            await self.page.screenshot(path='certifiedcredit_home_page.png')
+            await safe_screenshot(self.page, 'certifiedcredit_home_page.png')
 
             # Click "User Setup" link
             await self.page.click('a:has-text("User Setup")', timeout=10000)
@@ -378,17 +373,16 @@ class CertifiedCreditAutomation:
             await asyncio.sleep(1)
 
             # Take screenshot of User Setup page
-            await self.page.screenshot(path='certifiedcredit_user_setup_page.png')
+            await safe_screenshot(self.page, 'certifiedcredit_user_setup_page.png')
 
             # Save HTML for inspection
             page_html = await self.page.content()
-            with open('certifiedcredit_user_setup_page.html', 'w', encoding='utf-8') as f:
-                f.write(page_html)
+            safe_save_debug_html(page_html, 'certifiedcredit_user_setup_page.html')
             logger.info("User Setup page loaded, HTML saved")
 
         except Exception as e:
             logger.error(f"Navigation to User Setup failed: {e}")
-            await self.page.screenshot(path='certifiedcredit_navigation_error.png')
+            await safe_screenshot(self.page, 'certifiedcredit_navigation_error.png')
             raise
 
     async def _click_add_button(self):
@@ -416,21 +410,19 @@ class CertifiedCreditAutomation:
             await asyncio.sleep(1)
 
             # Take screenshot of popup
-            await self.popup.screenshot(path='certifiedcredit_new_user_form.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_new_user_form.png')
 
             # Save HTML for inspection
             popup_html = await self.popup.content()
-            with open('certifiedcredit_new_user_form.html', 'w', encoding='utf-8') as f:
-                f.write(popup_html)
+            safe_save_debug_html(popup_html, 'certifiedcredit_new_user_form.html')
             logger.info("New User form popup opened and HTML saved")
 
         except Exception as e:
             logger.error(f"Failed to open New User form: {e}")
-            await self.page.screenshot(path='certifiedcredit_add_button_error.png')
+            await safe_screenshot(self.page, 'certifiedcredit_add_button_error.png')
             # Save page HTML to debug
             page_html = await self.page.content()
-            with open('certifiedcredit_add_button_page.html', 'w', encoding='utf-8') as f:
-                f.write(page_html)
+            safe_save_debug_html(page_html, 'certifiedcredit_add_button_page.html')
             raise
 
     async def _fill_user_form(self, user_data: Dict[str, Any]):
@@ -503,7 +495,7 @@ class CertifiedCreditAutomation:
 
         except Exception as e:
             logger.error(f"Form filling failed: {e}")
-            await self.popup.screenshot(path='certifiedcredit_form_error.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_form_error.png')
             raise
 
     async def _configure_access_permissions(self):
@@ -553,11 +545,11 @@ class CertifiedCreditAutomation:
                     logger.warning("Could not set Rescore Ordering to 'No access'")
 
             # Take screenshot
-            await self.popup.screenshot(path='certifiedcredit_permissions_configured.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_permissions_configured.png')
 
         except Exception as e:
             logger.error(f"Access permissions configuration failed: {e}")
-            await self.popup.screenshot(path='certifiedcredit_permissions_error.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_permissions_error.png')
             raise
 
     async def _save_user(self, current_username: str) -> Dict[str, Any]:
@@ -583,7 +575,7 @@ class CertifiedCreditAutomation:
 
         try:
             # Take screenshot before save
-            await self.popup.screenshot(path='certifiedcredit_before_save.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_before_save.png')
 
             # Wait 5 seconds before clicking save to ensure form is ready
             logger.info("Waiting 5 seconds before clicking Save...")
@@ -606,11 +598,10 @@ class CertifiedCreditAutomation:
                 # Check for duplicate USERNAME (login field)
                 if 'duplicate' in page_lower and 'login' in page_lower:
                     logger.warning("❌ DUPLICATE USERNAME DETECTED in page content")
-                    await self.popup.screenshot(path='certifiedcredit_duplicate_login.png')
+                    await safe_screenshot(self.popup, 'certifiedcredit_duplicate_login.png')
 
                     # Save HTML for debugging
-                    with open('certifiedcredit_duplicate_error.html', 'w', encoding='utf-8') as f:
-                        f.write(page_content)
+                    safe_save_debug_html(page_content, 'certifiedcredit_duplicate_error.html')
 
                     save_result['success'] = False
                     save_result['type'] = 'duplicate_username'
@@ -638,7 +629,7 @@ class CertifiedCreditAutomation:
 
         except Exception as e:
             logger.error(f"Save failed: {e}")
-            await self.popup.screenshot(path='certifiedcredit_save_error.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_save_error.png')
             save_result['success'] = False
             save_result['type'] = 'error'
             save_result['message'] = str(e)
@@ -674,7 +665,7 @@ class CertifiedCreditAutomation:
                     result['is_duplicate'] = True
                     result['skip'] = True
                     result['message'] = 'User already exists (email may be registered)'
-                    await self.popup.screenshot(path='certifiedcredit_duplicate_user.png')
+                    await safe_screenshot(self.popup, 'certifiedcredit_duplicate_user.png')
 
         except Exception as e:
             logger.warning(f"Error checking for duplicate user: {e}")
@@ -730,8 +721,7 @@ class CertifiedCreditAutomation:
             await self.page.wait_for_selector('input[value="Add"]', timeout=10000)
 
             # Take screenshot to see the user list
-            await self.page.screenshot(path='certifiedcredit_user_list.png')
-            logger.info("Screenshot of user list saved")
+            await safe_screenshot(self.page, 'certifiedcredit_user_list.png')
 
             # Find the table row with matching display name and click the Name link
             # We need to find the most recently created user (last in the list with this name)
@@ -795,23 +785,22 @@ class CertifiedCreditAutomation:
 
             # Save HTML to find the checkbox
             restrictions_html = await self.popup.content()
-            with open('certifiedcredit_restrictions_tab.html', 'w', encoding='utf-8') as f:
-                f.write(restrictions_html)
+            safe_save_debug_html(restrictions_html, 'certifiedcredit_restrictions_tab.html')
             logger.info("Saved Restrictions tab HTML")
 
             # Take screenshot of Restrictions tab
-            await self.popup.screenshot(path='certifiedcredit_restrictions_tab.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_restrictions_tab.png')
 
             # Check WORDER checkbox using the correct ID
             await self.popup.check('#chkDisableWebOrder')
             logger.info("Checked WORDER restriction (chkDisableWebOrder)")
 
             # Take screenshot after checking
-            await self.popup.screenshot(path='certifiedcredit_restrictions_configured.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_restrictions_configured.png')
 
         except Exception as e:
             logger.error(f"Restrictions configuration failed: {e}")
-            await self.popup.screenshot(path='certifiedcredit_restrictions_error.png')
+            await safe_screenshot(self.popup, 'certifiedcredit_restrictions_error.png')
             raise
 
 
