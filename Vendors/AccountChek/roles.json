@@ -2,8 +2,8 @@
   "roles": [
     {
       "value": "BranchAdmin",
-      "description": "Branch Administrator - manages users at branch level",
-      "keywords": ["branch manager", "branch admin", "office manager"]
+      "description": "Branch Administrator - branch managers, sales managers, area managers",
+      "keywords": ["branch manager", "branch admin", "sales manager", "area manager"]
     },
     {
       "value": "CorporateAdmin",
@@ -12,13 +12,13 @@
     },
     {
       "value": "Operations",
-      "description": "Operations role - operational staff",
-      "keywords": ["operations", "ops manager", "operations manager", "operations specialist"]
+      "description": "Operations role - operations managers, office managers, underwriters",
+      "keywords": ["operations", "ops manager", "operations manager", "operations specialist", "office manager", "underwriter", "underwriting"]
     },
     {
       "value": "Processor",
-      "description": "Processor role - processes loan applications",
-      "keywords": ["processor", "loan processor", "mortgage processor", "processing"]
+      "description": "Processor role - loan processors, loan coordinators, loan officer assistants, production partners",
+      "keywords": ["processor", "loan processor", "mortgage processor", "processing", "loan officer assistant", "production partner", "loan setup", "loan coordinator"]
     },
     {
       "value": "RegionAdmin",
@@ -27,8 +27,8 @@
     },
     {
       "value": "User",
-      "description": "Standard User - basic access level",
-      "keywords": ["user", "loan officer", "loan originator", "account manager", "specialist", "coordinator", "assistant"]
+      "description": "Standard User - loan officers, loan originators",
+      "keywords": ["loan officer", "loan originator", "account manager"]
     }
   ]
 }

@@ -233,7 +233,8 @@ The confidence should be a number between 0 and 1.
     @staticmethod
     def match_branch_from_dropdown(
         cost_center: str,
-        dropdown_options: List[str]
+        dropdown_options: List[str],
+        office_location: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Match a cost center to a branch from dropdown options
@@ -241,6 +242,7 @@ The confidence should be a number between 0 and 1.
         Args:
             cost_center: 4-digit cost center code
             dropdown_options: List of branch options from the dropdown
+            office_location: User's office location text for disambiguation
 
         Returns:
             Dict with matched branch, match type, and confidence
@@ -253,18 +255,57 @@ The confidence should be a number between 0 and 1.
                 'reasoning': 'No cost center or dropdown options available'
             }
 
-        # Try to find exact match (cost center appears in option text)
-        for option in dropdown_options:
-            if cost_center in option:
-                return {
-                    'matched_branch': option,
-                    'match_type': 'exact',
-                    'confidence': 1.0,
-                    'reasoning': f'Cost center {cost_center} found in branch name'
-                }
+        # Collect ALL matching options for the cost center
+        matches = [opt for opt in dropdown_options if cost_center in opt]
+
+        if len(matches) == 1:
+            return {
+                'matched_branch': matches[0],
+                'match_type': 'exact',
+                'confidence': 1.0,
+                'reasoning': f'Cost center {cost_center} found in branch name'
+            }
+
+        if len(matches) > 1:
+            # Multiple branches share the same cost center — disambiguate
+            # using the office_location text (e.g., "Flower Mound" in location
+            # matches "7023 - Flower Mound" over "7023 - Baton Rouge")
+            if office_location:
+                location_lower = office_location.lower()
+                # Strip digits and common separators to get location words
+                import re
+                location_words = re.sub(r'[\d\-–—/\\,]+', ' ', location_lower).split()
+                # Filter out short/common words
+                location_words = [w for w in location_words if len(w) > 2]
+
+                best_match = None
+                best_score = 0
+                for opt in matches:
+                    opt_lower = opt.lower()
+                    score = sum(1 for word in location_words if word in opt_lower)
+                    if score > best_score:
+                        best_score = score
+                        best_match = opt
+
+                if best_match and best_score > 0:
+                    return {
+                        'matched_branch': best_match,
+                        'match_type': 'disambiguated',
+                        'confidence': 0.9,
+                        'reasoning': f'Cost center {cost_center} matched {len(matches)} branches; '
+                                     f'selected "{best_match}" based on office location "{office_location}"'
+                    }
+
+            # Could not disambiguate — return first match with a warning
+            return {
+                'matched_branch': matches[0],
+                'match_type': 'ambiguous',
+                'confidence': 0.5,
+                'reasoning': f'Cost center {cost_center} matched {len(matches)} branches: '
+                             f'{", ".join(matches)}. Using first match — verify manually.'
+            }
 
         # No match found - use "Main" as fallback
-        # Try to find "Main" in the dropdown options
         main_option = next((opt for opt in dropdown_options if 'Main' in opt), None)
 
         if main_option:
@@ -275,7 +316,6 @@ The confidence should be a number between 0 and 1.
                 'reasoning': f'No match found for cost center {cost_center}, using Main branch as fallback'
             }
         else:
-            # If "Main" not found, use the first option
             return {
                 'matched_branch': dropdown_options[0] if dropdown_options else 'Main',
                 'match_type': 'fallback',

@@ -148,17 +148,20 @@ class AccountChekAutomation:
                 result['errors'].append(f"✗ {success_result['message']}")
                 logger.warning(f"Account creation failed for {user.display_name}: {success_result['message']}")
 
-            # Add any warnings from AI matching
-            if user_data.get('branch_fallback', False):
+            # Add any warnings from branch matching
+            if user_data.get('branch_match_type') == 'ambiguous':
+                result['warnings'].append(
+                    f"⚠ Multiple branches matched cost center '{user_data.get('cost_center')}'. "
+                    f"Used '{user_data['branch']}' — please verify this is correct."
+                )
+            elif user_data.get('branch_fallback', False):
                 cost_center = user_data.get('cost_center')
                 if cost_center:
-                    # Cost center was found but didn't match any branch
                     result['warnings'].append(
                         f"⚠ Branch fallback: Cost center '{cost_center}' not found in dropdown. "
                         f"Used '{user_data['branch']}' instead."
                     )
                 else:
-                    # No office location set in Entra ID
                     result['warnings'].append(
                         f"⚠ Branch fallback: User has no office location in Entra ID. "
                         f"Used '{user_data['branch']}' instead."
@@ -195,10 +198,10 @@ class AccountChekAutomation:
             'firstName': user.given_name or user.display_name.split()[0],
             'lastName': user.surname or user.display_name.split()[-1],
             'email': user.email,
-            'title': user.job_title or 'User',
             'password': newuser_password,  # From Key Vault
             'mustChangePassword': True,
             'region': 'Corporate',  # Always Corporate per requirements
+            'department': user.department,  # For branch disambiguation (contains branch name)
             'ai_suggestions': {}
         }
 
@@ -339,7 +342,7 @@ class AccountChekAutomation:
         await self.page.get_by_placeholder('First Name', exact=False).fill(user_data['firstName'])
         await self.page.get_by_placeholder('Last Name', exact=False).fill(user_data['lastName'])
         await self.page.get_by_placeholder('Email', exact=False).fill(user_data['email'])
-        await self.page.get_by_placeholder('Job Title', exact=False).fill(user_data['title'])
+        # Job Title intentionally left blank per business requirement
         await self.page.get_by_placeholder('Password', exact=False).fill(user_data['password'])
 
         # Get all select dropdowns
@@ -371,14 +374,16 @@ class AccountChekAutomation:
             )
         logger.info(f"Available branches: {branch_options}")
 
-        # Match branch from dropdown using cost center
+        # Match branch from dropdown using cost center + office location for disambiguation
         if user_data.get('cost_center'):
             branch_match = AIMatcherService.match_branch_from_dropdown(
                 user_data['cost_center'],
-                branch_options
+                branch_options,
+                office_location=user_data.get('department')
             )
 
             user_data['branch'] = branch_match['matched_branch']
+            user_data['branch_match_type'] = branch_match['match_type']
             user_data['branch_fallback'] = (branch_match['match_type'] == 'fallback')
 
             logger.info(
@@ -386,7 +391,9 @@ class AccountChekAutomation:
                 f"(type: {branch_match['match_type']}, confidence: {branch_match['confidence']:.2f})"
             )
 
-            if user_data['branch_fallback']:
+            if branch_match['match_type'] == 'ambiguous':
+                logger.warning(f"Ambiguous branch match: {branch_match['reasoning']}")
+            elif user_data['branch_fallback']:
                 logger.warning(f"Using fallback branch: {branch_match['reasoning']}")
         else:
             # No cost center - use Main as fallback
