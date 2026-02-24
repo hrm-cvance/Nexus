@@ -98,6 +98,7 @@ try {
     $Shortcut = $WshShell.CreateShortcut($StartMenuPath)
     $Shortcut.TargetPath = "$InstallDir\Nexus.exe"
     $Shortcut.WorkingDirectory = $InstallDir
+    $Shortcut.IconLocation = "$InstallDir\Nexus.exe,0"
     $Shortcut.Description = "Nexus - Vendor Account Provisioning"
     $Shortcut.Save()
     Write-Log "Created Start Menu shortcut"
