@@ -1,4 +1,4 @@
-# Nexus - Intune Install Script
+﻿# Nexus - Intune Install Script
 # Deploys Nexus.exe and installs Playwright Chromium browser
 #
 # Intune Win32 app configuration:
@@ -70,7 +70,7 @@ try {
     # Install Playwright Chromium browser (skip if already present)
     $existingChromium = Get-ChildItem -Path $BrowserDir -Directory -Filter "chromium-*" -ErrorAction SilentlyContinue
     if ($existingChromium) {
-        Write-Log "Playwright Chromium already installed at $BrowserDir\$($existingChromium.Name) — skipping browser install"
+        Write-Log "Playwright Chromium already installed at $BrowserDir\$($existingChromium.Name) - skipping browser install"
     } else {
         Write-Log "Installing Playwright Chromium browser to shared path..."
         $process = Start-Process -FilePath "$InstallDir\Nexus.exe" `

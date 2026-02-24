@@ -188,7 +188,7 @@ The `deploy/` directory contains PowerShell scripts for Win32 app deployment:
 
 | Script | Purpose |
 |---|---|
-| `deploy/install.ps1` | Installs `Nexus.exe`, sets up shared Playwright browser path, creates Start Menu shortcut |
+| `deploy/install.ps1` | Installs `Nexus.exe`, sets up shared Playwright browser path (skips if already installed), creates Start Menu shortcut |
 | `deploy/uninstall.ps1` | Removes application, browsers, environment variables, and shortcuts |
 
 **Intune Win32 app configuration:**
@@ -201,7 +201,9 @@ The `deploy/` directory contains PowerShell scripts for Win32 app deployment:
 | Max install time | 60 minutes |
 | Detection rule | File exists: `C:\Program Files\Nexus\Nexus.exe` |
 
-The install script sets a machine-wide `PLAYWRIGHT_BROWSERS_PATH` environment variable so all users share a single Chromium installation at `C:\ProgramData\Nexus\browsers`.
+The install script sets a machine-wide `PLAYWRIGHT_BROWSERS_PATH` environment variable so all users share a single Chromium installation at `C:\ProgramData\Nexus\browsers`. On reinstall/update, Playwright browser installation is skipped if a `chromium-*` directory already exists.
+
+> **Encoding:** The PowerShell scripts in `deploy/` must be saved with **UTF-8 BOM** encoding and **CRLF** line endings. Windows PowerShell 5.1 (used by Intune in SYSTEM context) requires the BOM to correctly parse the files.
 
 ## Usage
 

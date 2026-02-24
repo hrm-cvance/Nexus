@@ -1,4 +1,4 @@
-# Nexus - Intune Uninstall Script
+﻿# Nexus - Intune Uninstall Script
 # Removes Nexus application, shared browsers, and environment variable
 #
 # Intune Win32 app configuration:

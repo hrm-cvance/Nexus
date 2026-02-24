@@ -92,7 +92,7 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - **Version info:** `version_info.py` reads `APP_VERSION` from `main.py` and generates `version_info.txt` for PyInstaller's `--version-file` flag (embeds File Version, Product Version, Company Name in the exe properties)
 - **Intune packaging:** `build.bat` automatically assembles `dist/intune_source/` (Nexus.exe + install.ps1 + uninstall.ps1) and runs `C:\PrepTool\IntuneWinAppUtil.exe` to produce `dist/intune_output/install.intunewin`
 - **Intune deployment scripts:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment
-- **Playwright browsers:** Shared path via `PLAYWRIGHT_BROWSERS_PATH` env var at `C:\ProgramData\Nexus\browsers`
+- **Playwright browsers:** Shared path via `PLAYWRIGHT_BROWSERS_PATH` env var at `C:\ProgramData\Nexus\browsers`; `install.ps1` skips browser install if `chromium-*` directory already exists
 - **Config at runtime:** Bundled inside the exe; `config_manager.py` loads from `sys._MEIPASS` when frozen
 - **IntuneWinAppUtil location:** `C:\PrepTool\IntuneWinAppUtil.exe` (Microsoft Win32 Content Prep Tool)
 
@@ -108,6 +108,11 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - On startup, cached accounts are restored so users are auto-authenticated without a browser sign-in
 - Sign-out deletes the cache file entirely (not just cleared in memory)
 - Refresh tokens persist for ~90 days of inactivity; after that, a fresh browser sign-in is required
+
+### PowerShell Script Encoding
+- `deploy/install.ps1` and `deploy/uninstall.ps1` MUST be saved with **UTF-8 BOM** encoding and **CRLF** line endings
+- Windows PowerShell 5.1 (used by Intune/SYSTEM context) defaults to ANSI without a BOM, which causes parse errors
+- Avoid Unicode characters (em dashes, smart quotes) in PS1 files — use ASCII equivalents
 
 ## Important Notes
 - All automation runs in a non-headless Chromium browser so the user can observe and intervene (e.g., MFA)
