@@ -299,7 +299,7 @@ Nexus/
 │   └── theworknumber.py
 ├── models/                            # Data models
 │   ├── user.py                        # EntraUser model
-│   ├── vendor.py                      # Vendor configuration model
+│   ├── vendor.py                      # VendorConfig model
 │   └── automation_result.py           # Provisioning result model
 ├── Vendors/                           # Per-vendor configuration
 │   ├── {VendorName}/
@@ -313,7 +313,8 @@ Nexus/
 │   ├── VENDOR_ONBOARDING_TEMPLATE.md  # Template for documenting new vendor workflows
 │   └── VENDOR_AUTOMATION_CHECKLIST.md # Vendor readiness matrix
 └── utils/
-    └── logger.py                      # Logging configuration
+    ├── logger.py                      # Logging configuration
+    └── screenshot.py                  # Safe screenshot and debug file saving (%LOCALAPPDATA%\Nexus\screenshots\)
 ```
 
 ## Troubleshooting
@@ -345,7 +346,7 @@ Nexus/
 
 ### Logs
 
-Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YYYYMMDD.log`. Screenshots are captured at each automation step and saved to the working directory (gitignored).
+Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YYYYMMDD.log`. Screenshots are captured at each automation step and saved to `%LOCALAPPDATA%\Nexus\screenshots\`.
 
 ## Security
 

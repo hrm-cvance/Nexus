@@ -56,7 +56,7 @@ automation/vendors/
   experience.py                  # Experience.com automation (currently disabled)
 models/
   user.py                        # EntraUser model
-  vendor.py                      # Vendor config models
+  vendor.py                      # VendorConfig model
   automation_result.py           # Automation result models
 Vendors/{VendorName}/
   config.json                    # Vendor-specific config (org, roles, URLs)
@@ -103,11 +103,13 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - `SetCurrentProcessExplicitAppUserModelID` ensures the taskbar shows Nexus's icon instead of Python's
 - Version number (`APP_VERSION` from `main.py`) is displayed in the window title bar
 
-### Authentication & Token Cache
+### Authentication & Key Vault Credential Flow
 - `AuthService` uses MSAL's `SerializableTokenCache` to persist tokens to `%LOCALAPPDATA%\Nexus\token_cache.bin`
 - On startup, cached accounts are restored so users are auto-authenticated without a browser sign-in
 - Sign-out deletes the cache file entirely (not just cleared in memory)
 - Refresh tokens persist for ~90 days of inactivity; after that, a fresh browser sign-in is required
+- `KeyVaultService` requires a credential object (no fallback) — always initialized with `MSALCredentialAdapter` from the GUI sign-in flow
+- Vendor modules that call `KeyVaultService()` with no args get the already-initialized singleton instance
 
 ### PowerShell Script Encoding
 - `deploy/install.ps1` and `deploy/uninstall.ps1` MUST be saved with **UTF-8 BOM** encoding and **CRLF** line endings
