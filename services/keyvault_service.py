@@ -12,7 +12,7 @@ import os
 from azure.keyvault.secrets import SecretClient
 from azure.identity import DefaultAzureCredential, AzureCliCredential
 from azure.core.exceptions import AzureError
-from typing import Dict, Optional, List
+from typing import Dict, Optional
 
 from utils.logger import get_logger
 
@@ -194,40 +194,6 @@ class KeyVaultService:
         logger.debug(f"Getting vendor credential: {secret_name}")
         return self.get_secret(secret_name)
 
-    def get_vendor_credentials(self, vendor_name: str) -> Dict[str, str]:
-        """
-        Retrieve vendor credentials from Key Vault
-
-        Args:
-            vendor_name: Name of vendor (e.g., "accountchek")
-
-        Returns:
-            Dictionary with login_email, login_password, login_url, newuser_password
-
-        Raises:
-            KeyVaultError: If credentials cannot be retrieved
-        """
-        logger.info(f"Retrieving credentials for vendor: {vendor_name}")
-
-        try:
-            # Retrieve secrets with naming convention: {vendor}-{credential-type}
-            credentials = {
-                'login_email': self.get_vendor_credential(vendor_name, 'login-email'),
-                'login_password': self.get_vendor_credential(vendor_name, 'login-password'),
-                'login_url': self.get_vendor_credential(vendor_name, 'login-url'),
-                'newuser_password': self.get_vendor_credential(vendor_name, 'newuser-password')
-            }
-
-            logger.info(f"✓ Successfully retrieved all credentials for {vendor_name}")
-            return credentials
-
-        except KeyVaultError:
-            raise
-        except Exception as e:
-            error_msg = f"Failed to retrieve credentials for {vendor_name}: {str(e)}"
-            logger.error(error_msg)
-            raise KeyVaultError(error_msg)
-
     def test_connection(self) -> bool:
         """
         Test connection to Key Vault
@@ -250,26 +216,3 @@ class KeyVaultService:
 
     def __repr__(self):
         return f"<KeyVaultService {self.vault_url}>"
-
-
-# Global instance (lazy initialization)
-_keyvault_service: Optional[KeyVaultService] = None
-
-
-def get_keyvault_service(vault_url: Optional[str] = None) -> KeyVaultService:
-    """
-    Get or create the global KeyVault service instance
-
-    Args:
-        vault_url: Key Vault URL (only used on first call)
-
-    Returns:
-        KeyVaultService instance
-
-    Raises:
-        KeyVaultError: If initialization fails
-    """
-    global _keyvault_service
-    if _keyvault_service is None:
-        _keyvault_service = KeyVaultService(vault_url=vault_url)
-    return _keyvault_service

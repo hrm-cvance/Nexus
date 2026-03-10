@@ -6,7 +6,6 @@ Represents a user from Microsoft Entra ID
 
 from dataclasses import dataclass, field
 from typing import List, Optional
-from datetime import datetime
 
 
 @dataclass
@@ -37,8 +36,6 @@ class EntraUser:
     employee_id: Optional[str] = None
     mobile_phone: Optional[str] = None
     business_phones: List[str] = field(default_factory=list)
-    photo_url: Optional[str] = None
-    photo_data: Optional[bytes] = None
 
     # Extension attributes from Entra ID
     nmls_number: Optional[str] = None          # extensionAttribute2
@@ -47,10 +44,6 @@ class EntraUser:
 
     # Group memberships
     groups: List[EntraGroup] = field(default_factory=list)
-
-    # Metadata
-    created_datetime: Optional[datetime] = None
-    last_sign_in: Optional[datetime] = None
 
     @classmethod
     def from_graph_api(cls, graph_data: dict) -> 'EntraUser':
@@ -88,13 +81,6 @@ class EntraUser:
             headshot_url=headshot_url,
             website_url=website_url
         )
-
-    @property
-    def full_name(self) -> str:
-        """Get full name from given name and surname"""
-        if self.given_name and self.surname:
-            return f"{self.given_name} {self.surname}"
-        return self.display_name
 
     @property
     def email(self) -> str:

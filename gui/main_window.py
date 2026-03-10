@@ -182,7 +182,8 @@ class NexusMainWindow(ctk.CTk):
         self.tab_provisioning = AccountProvisioningTab(
             parent=self.tabview.tab("Account Provisioning"),
             config_manager=self.config_manager,
-            on_start_automation=self._on_start_automation
+            on_start_automation=self._on_start_automation,
+            on_back_to_search=self._on_back_to_search
         )
 
         # Initialize Tab 3: Automation Status
@@ -199,18 +200,6 @@ class NexusMainWindow(ctk.CTk):
             on_new_automation=self._on_new_automation
         )
 
-    def _create_placeholder_tab(self, parent, tab_name):
-        """Create placeholder for tabs not yet implemented"""
-        frame = ctk.CTkFrame(parent)
-        frame.pack(fill="both", expand=True, padx=20, pady=20)
-
-        label = ctk.CTkLabel(
-            frame,
-            text=f"{tab_name}\n\nComing soon...",
-            font=ctk.CTkFont(size=18)
-        )
-        label.pack(expand=True)
-
     def _on_user_selected(self, user):
         """Callback when user is selected from search"""
         logger.info(f"User selected: {user.display_name}")
@@ -220,6 +209,11 @@ class NexusMainWindow(ctk.CTk):
 
         # Switch to Account Provisioning tab
         self.tabview.set("Account Provisioning")
+
+    def _on_back_to_search(self):
+        """Callback when Back to Search is clicked from provisioning tab"""
+        logger.info("Returning to user search")
+        self.tabview.set("User Search")
 
     def _on_start_automation(self, user, vendors):
         """Callback when automation is started"""

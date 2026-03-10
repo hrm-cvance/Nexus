@@ -25,7 +25,6 @@ class SearchType(Enum):
     LAST_NAME = "surname"
     DISPLAY_NAME = "displayName"
     EMPLOYEE_ID = "employeeId"
-    USER_PRINCIPAL_NAME = "userPrincipalName"
 
 
 class GraphAPIError(Exception):

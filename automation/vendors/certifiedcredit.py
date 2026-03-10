@@ -825,11 +825,9 @@ async def provision_user(
         Dict with status, success boolean, and any messages/errors
     """
     # Get KeyVault service
-    from services.config_manager import ConfigManager
-    from services.keyvault_service import get_keyvault_service
+    from services.keyvault_service import KeyVaultService
 
-    config_manager = ConfigManager()
-    keyvault = get_keyvault_service()
+    keyvault = KeyVaultService()
 
     # Create automation instance
     automation = CertifiedCreditAutomation(config_path, keyvault)

@@ -156,7 +156,6 @@ class ExperienceAutomation:
             Dict with success status, messages, widget_code, profile_url
         """
         self.current_user = user
-        self.screenshot_counter = 0
         user_data = self._prepare_user_data(user)
         logger.info(f"Starting Experience.com automation for {user.display_name}")
         logger.info(f"Prepared user data: {user_data}")

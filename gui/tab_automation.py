@@ -13,8 +13,6 @@ import customtkinter as ctk
 import asyncio
 import os
 import threading
-import subprocess
-import sys
 from typing import List, Dict, Any, Optional, Callable
 from pathlib import Path
 from datetime import datetime

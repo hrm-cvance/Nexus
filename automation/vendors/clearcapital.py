@@ -28,8 +28,6 @@ from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
 from utils.screenshot import safe_screenshot
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
@@ -253,7 +251,6 @@ class ClearCapitalAutomation:
 
         user_data = {
             'username': username,
-            'username_if_exists': f"{username}1",  # Append 1 if username exists
             'firstName': first_name,
             'lastName': last_name,
             'fullName': user.display_name,
@@ -633,11 +630,9 @@ async def provision_user(
         Dict with status, success boolean, and any messages/errors
     """
     # Get KeyVault service
-    from services.config_manager import ConfigManager
-    from services.keyvault_service import get_keyvault_service
+    from services.keyvault_service import KeyVaultService
 
-    config_manager = ConfigManager()
-    keyvault = get_keyvault_service()
+    keyvault = KeyVaultService()
 
     # Create automation instance
     automation = ClearCapitalAutomation(config_path, keyvault)

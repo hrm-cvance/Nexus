@@ -26,11 +26,13 @@ class AccountProvisioningTab:
         self,
         parent: ctk.CTkFrame,
         config_manager: ConfigManager,
-        on_start_automation: Callable
+        on_start_automation: Callable,
+        on_back_to_search: Callable = None
     ):
         self.parent = parent
         self.config_manager = config_manager
         self.on_start_automation = on_start_automation
+        self.on_back_to_search = on_back_to_search
 
         self.current_user: Optional[EntraUser] = None
         self.detected_vendors: List[VendorConfig] = []
@@ -460,8 +462,8 @@ class AccountProvisioningTab:
     def _on_back_clicked(self):
         """Handle back button click"""
         logger.info("Returning to user search")
-        # TODO: Switch back to tab 1
-        # This will be implemented when we wire up the tab switching
+        if self.on_back_to_search:
+            self.on_back_to_search()
 
     def clear(self):
         """Clear the current user and vendors"""

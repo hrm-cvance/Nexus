@@ -14,11 +14,6 @@ from playwright.async_api import async_playwright, Page
 from models.user import EntraUser
 from utils.screenshot import safe_screenshot, safe_save_debug_html
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -839,11 +834,9 @@ async def provision_user(
         Dict with status, success boolean, and any messages/errors
     """
     # Get KeyVault service
-    from services.config_manager import ConfigManager
-    from services.keyvault_service import get_keyvault_service
+    from services.keyvault_service import KeyVaultService
 
-    config_manager = ConfigManager()
-    keyvault = get_keyvault_service()
+    keyvault = KeyVaultService()
 
     # Create automation instance
     automation = DataVerifyAutomation(config_path, keyvault)

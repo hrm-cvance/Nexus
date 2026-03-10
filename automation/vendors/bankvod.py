@@ -16,10 +16,10 @@ import json
 import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional
-from playwright.async_api import async_playwright, Page, Browser, TimeoutError as PlaywrightTimeout
+from playwright.async_api import async_playwright, Page, Browser
 
 from models.user import EntraUser
-from services.keyvault_service import get_keyvault_service, KeyVaultError
+from services.keyvault_service import KeyVaultService, KeyVaultError
 from services.ai_matcher import AIMatcherService
 from utils.logger import get_logger
 from utils.screenshot import safe_screenshot
@@ -42,7 +42,7 @@ class BankVODAutomation:
 
         # Get Key Vault service for credentials
         try:
-            self.keyvault = get_keyvault_service()
+            self.keyvault = KeyVaultService()
             logger.info("Using Azure Key Vault for credentials")
         except KeyVaultError as e:
             logger.error(f"Key Vault initialization failed: {e}")
@@ -480,7 +480,6 @@ class BankVODAutomation:
             if iframe_element:
                 iframe = await iframe_element.content_frame()
                 if iframe:
-                    iframe_content = await iframe.content()
                     iframe_text = await iframe.evaluate('() => document.body ? document.body.innerText : ""')
                     iframe_lower = iframe_text.lower()
                     logger.info(f"RadWindow iframe text: {iframe_text[:200]}")

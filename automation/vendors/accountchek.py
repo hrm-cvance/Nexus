@@ -9,11 +9,11 @@ import json
 import asyncio
 from pathlib import Path
 from typing import Dict, Any, Optional, List
-from playwright.async_api import async_playwright, Page, Browser, TimeoutError as PlaywrightTimeout
+from playwright.async_api import async_playwright, Page, Browser
 
 from models.user import EntraUser
 from services.ai_matcher import AIMatcherService
-from services.keyvault_service import get_keyvault_service, KeyVaultError
+from services.keyvault_service import KeyVaultService, KeyVaultError
 from utils.logger import get_logger
 from utils.screenshot import safe_screenshot
 
@@ -38,7 +38,7 @@ class AccountChekAutomation:
 
         # Get Key Vault service for credentials
         try:
-            self.keyvault = get_keyvault_service()
+            self.keyvault = KeyVaultService()
             logger.info("Using Azure Key Vault for credentials")
         except KeyVaultError as e:
             logger.error(f"Key Vault initialization failed: {e}")
@@ -207,13 +207,11 @@ class AccountChekAutomation:
 
         # Extract cost center from office location OR department
         cost_center = None
-        cost_center_source = None
 
         # Try office location first
         if user.office_location:
             cost_center = AIMatcherService.extract_cost_center(user.office_location)
             if cost_center:
-                cost_center_source = "office location"
                 data['cost_center'] = cost_center
                 logger.info(f"Extracted cost center: {cost_center} from office location: {user.office_location}")
 
@@ -221,7 +219,6 @@ class AccountChekAutomation:
         if not cost_center and user.department:
             cost_center = AIMatcherService.extract_cost_center(user.department)
             if cost_center:
-                cost_center_source = "department"
                 data['cost_center'] = cost_center
                 logger.info(f"Extracted cost center: {cost_center} from department: {user.department}")
 
