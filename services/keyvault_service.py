@@ -10,7 +10,6 @@ Retrieves vendor credentials from Azure Key Vault:
 
 import os
 from azure.keyvault.secrets import SecretClient
-from azure.identity import DefaultAzureCredential, AzureCliCredential
 from azure.core.exceptions import AzureError
 from typing import Dict, Optional
 
@@ -44,11 +43,11 @@ class KeyVaultService:
         Args:
             vault_url: Key Vault URL (e.g., https://hrm-nexus-credentials.vault.azure.net/)
                       If None, will try to get from environment variable AZURE_KEYVAULT_URL
-            credential: Azure credential object (optional, uses DefaultAzureCredential if not provided)
+            credential: Azure credential object (must be provided, e.g. MSALCredentialAdapter)
             skip_connection_test: Skip initial connection test (useful when credential requires user sign-in)
 
         Raises:
-            KeyVaultError: If vault URL is not provided
+            KeyVaultError: If vault URL is not provided or credential is missing
         """
         # Skip if already initialized
         if self._initialized:
@@ -64,23 +63,14 @@ class KeyVaultService:
             logger.error(error_msg)
             raise KeyVaultError(error_msg)
 
+        if not credential:
+            error_msg = "Azure credential must be provided. Sign in through the GUI first."
+            logger.error(error_msg)
+            raise KeyVaultError(error_msg)
+
         try:
-            # Use provided credential or fall back to automatic detection
-            if credential:
-                self.credential = credential
-                logger.info("Using provided credential for Key Vault (interactive browser auth)")
-            else:
-                # Try Azure CLI first, then fall back to DefaultAzureCredential
-                try:
-                    self.credential = AzureCliCredential()
-                    # Test the credential
-                    self.credential.get_token("https://vault.azure.net/.default")
-                    logger.info("Using Azure CLI authentication for Key Vault")
-                except Exception as cli_error:
-                    logger.debug(f"Azure CLI auth failed: {cli_error}")
-                    # Fall back to DefaultAzureCredential (managed identity, environment vars, etc.)
-                    self.credential = DefaultAzureCredential()
-                    logger.info("Using DefaultAzureCredential for Key Vault")
+            self.credential = credential
+            logger.info("Using provided credential for Key Vault")
 
             # Create Key Vault client
             self.client = SecretClient(vault_url=self.vault_url, credential=self.credential)
