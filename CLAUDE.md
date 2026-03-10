@@ -81,6 +81,12 @@ Each vendor automation module in `automation/vendors/` follows this pattern:
 ### Duplicate User Handling
 When a vendor reports a duplicate username/email, the automation calls async callbacks (`on_username_conflict`, `on_email_conflict`) that display a dialog to the user via `threading.Event` synchronization between the async automation thread and the Tkinter GUI thread. The dialog classes are `UsernameConflictDialog` and `EmailConflictDialog` in `gui/tab_automation.py`.
 
+**Important:** Conflict callbacks run inside async functions. Never use blocking `Event.wait(timeout)` — it deadlocks the asyncio event loop. Use async polling instead:
+```python
+while not dialog_result_holder['ready'].wait(timeout=0.1):
+    await asyncio.sleep(0.1)
+```
+
 ### Vendor Config
 Each vendor has a config in `Vendors/{VendorName}/config.json` and a mapping entry in `config/vendor_mappings.json` that links an Entra AD group to the automation module.
 
@@ -110,6 +116,7 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - Refresh tokens persist for ~90 days of inactivity; after that, a fresh browser sign-in is required
 - `KeyVaultService` requires a credential object (no fallback) — always initialized with `MSALCredentialAdapter` from the GUI sign-in flow
 - Vendor modules that call `KeyVaultService()` with no args get the already-initialized singleton instance
+- Call `KeyVaultService.reset()` when the user signs out/re-authenticates to clear the singleton and credential cache
 
 ### PowerShell Script Encoding
 - `deploy/install.ps1` and `deploy/uninstall.ps1` MUST be saved with **UTF-8 BOM** encoding and **CRLF** line endings
@@ -125,3 +132,12 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - MMI uses `extensionAttribute2` from Entra ID as the NMLS number (`user.nmls_number`)
 - Experience.com is currently disabled in `vendor_mappings.json`
 - Key Vault has 32 secrets total — see `docs/AZURE_KEYVAULT_SETUP.md` for the full inventory
+- When using Playwright `page.evaluate()`, pass user data as arguments — never interpolate via f-strings (injection risk):
+  ```python
+  # Correct:
+  await page.evaluate('(name) => { ... }', display_name)
+  # Wrong:
+  await page.evaluate(f'() => {{ ... "{display_name}" ... }}')
+  ```
+- Vendor automation `except` blocks must explicitly set `result['success'] = False`
+- Browser cleanup (`browser.close()`) must be in a `finally` block to prevent browser leaks on error
