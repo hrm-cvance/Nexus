@@ -8,7 +8,6 @@ Provides safe screenshot and HTML debug file saving that:
 """
 
 import os
-import sys
 import logging
 from pathlib import Path
 from typing import Union
@@ -30,14 +29,11 @@ def get_screenshot_dir() -> Path:
     if _screenshot_dir is not None:
         return _screenshot_dir
 
-    if sys.platform == 'win32':
-        local_appdata = os.environ.get('LOCALAPPDATA', '')
-        if local_appdata:
-            base = Path(local_appdata) / 'Nexus' / 'screenshots'
-        else:
-            base = Path.home() / 'AppData' / 'Local' / 'Nexus' / 'screenshots'
+    local_appdata = os.environ.get('LOCALAPPDATA', '')
+    if local_appdata:
+        base = Path(local_appdata) / 'Nexus' / 'screenshots'
     else:
-        base = Path.home() / '.nexus' / 'screenshots'
+        base = Path.home() / 'AppData' / 'Local' / 'Nexus' / 'screenshots'
 
     try:
         base.mkdir(parents=True, exist_ok=True)

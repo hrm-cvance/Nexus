@@ -53,15 +53,12 @@ def setup_logger(app_name: str, log_level: str = "INFO") -> logging.Logger:
     # File handler (if logs directory exists)
     try:
         # Determine log directory
-        if sys.platform == 'win32':
-            import os
-            appdata = os.environ.get('APPDATA', '')
-            if appdata:
-                log_dir = Path(appdata) / 'Nexus' / 'logs'
-            else:
-                log_dir = Path.home() / 'AppData' / 'Roaming' / 'Nexus' / 'logs'
+        import os
+        appdata = os.environ.get('APPDATA', '')
+        if appdata:
+            log_dir = Path(appdata) / 'Nexus' / 'logs'
         else:
-            log_dir = Path.home() / '.nexus' / 'logs'
+            log_dir = Path.home() / 'AppData' / 'Roaming' / 'Nexus' / 'logs'
 
         # Create log directory if it doesn't exist
         log_dir.mkdir(parents=True, exist_ok=True)

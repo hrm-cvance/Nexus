@@ -37,16 +37,12 @@ def is_playwright_browser_installed() -> tuple[bool, str]:
         Tuple of (is_installed, error_message)
     """
     try:
-        import platform
-
         # Check PLAYWRIGHT_BROWSERS_PATH first (set by Intune deployment)
         custom_path = os.environ.get("PLAYWRIGHT_BROWSERS_PATH")
         if custom_path:
             playwright_path = Path(custom_path)
-        elif platform.system() == "Windows":
-            playwright_path = Path.home() / "AppData" / "Local" / "ms-playwright"
         else:
-            playwright_path = Path.home() / ".cache" / "ms-playwright"
+            playwright_path = Path.home() / "AppData" / "Local" / "ms-playwright"
 
         if not playwright_path.exists():
             return False, "Playwright Chromium browser not found. Please contact IT support."
