@@ -163,11 +163,7 @@ class MMIAutomation:
             if self.page:
                 await safe_screenshot(self.page, f'mmi_error_{user.display_name.replace(" ", "_")}.png')
 
-            # Leave browser open on failure so the tech can inspect
-            logger.info("Browser left open for inspection after failure")
-
-        else:
-            # Only close browser on success
+        finally:
             await self._cleanup()
 
         logger.info(f"MMI result: {result}")

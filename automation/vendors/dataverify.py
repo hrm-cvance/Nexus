@@ -659,6 +659,7 @@ class DataVerifyAutomation:
                         if not clicked:
                             logger.error("All methods to click Create A New User button failed!")
                             await safe_screenshot(self.page, 'dataverify_create_button_failed.png')
+                            return 'create_button_failed'
 
                         # Wait for the page to process
                         await asyncio.sleep(3)

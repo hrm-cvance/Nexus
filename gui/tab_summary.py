@@ -150,7 +150,9 @@ class SummaryTab:
         for vendor_result in summary.vendor_results:
             self._create_vendor_result_card(vendor_result)
 
-        # Show action buttons
+        # Show action buttons (unpack first to avoid duplicates on repeated calls)
+        self.pdf_btn.pack_forget()
+        self.new_btn.pack_forget()
         self.pdf_btn.pack(side="right", padx=20)
         self.new_btn.pack(side="right", padx=(0, 10))
 

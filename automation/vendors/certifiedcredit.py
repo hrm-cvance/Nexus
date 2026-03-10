@@ -164,10 +164,13 @@ class CertifiedCreditAutomation:
             result['messages'].append("✓ Configured restrictions")
 
             # Final save
-            await self._save_user(user_data['username'])
-            result['messages'].append("✓ User created successfully")
-
-            result['success'] = True
+            final_save = await self._save_user(user_data['username'])
+            if final_save.get('success') or final_save.get('type') == 'success':
+                result['messages'].append("✓ User created successfully")
+                result['success'] = True
+            else:
+                result['errors'].append(f"✗ Final save failed: {final_save.get('message', 'Unknown error')}")
+                result['success'] = False
             logger.info(f"✓ Successfully created Certified Credit account for {user.display_name}")
 
         except Exception as e:
@@ -728,23 +731,21 @@ class CertifiedCreditAutomation:
             username = user_data['username']
 
             # Use JavaScript to find the user link (don't click yet)
-            user_found = await self.page.evaluate(f'''() => {{
-                const displayName = "{display_name}";
-
+            user_found = await self.page.evaluate('''(displayName) => {
                 // Find all rows in the table
                 const rows = Array.from(document.querySelectorAll('tr'));
 
                 // Find rows where Name matches displayName
-                const matchingRows = rows.filter(row => {{
+                const matchingRows = rows.filter(row => {
                     const cells = row.querySelectorAll('td');
                     if (cells.length === 0) return false;
                     const nameCell = cells[0]; // First column is Name
                     return nameCell.textContent.trim().toUpperCase() === displayName.toUpperCase();
-                }});
+                });
 
                 // Return true if we found matching rows
                 return matchingRows.length > 0;
-            }}''')
+            }''', display_name)
 
             if not user_found:
                 raise Exception(f"Could not find user with display name: {display_name}")
@@ -755,21 +756,20 @@ class CertifiedCreditAutomation:
             try:
                 async with self.page.expect_popup(timeout=5000) as popup_info:
                     # Click the user link inside the expect_popup context
-                    await self.page.evaluate(f'''() => {{
-                        const displayName = "{display_name}";
+                    await self.page.evaluate('''(displayName) => {
                         const rows = Array.from(document.querySelectorAll('tr'));
-                        const matchingRows = rows.filter(row => {{
+                        const matchingRows = rows.filter(row => {
                             const cells = row.querySelectorAll('td');
                             if (cells.length === 0) return false;
                             const nameCell = cells[0];
                             return nameCell.textContent.trim().toUpperCase() === displayName.toUpperCase();
-                        }});
-                        if (matchingRows.length > 0) {{
+                        });
+                        if (matchingRows.length > 0) {
                             const targetRow = matchingRows[matchingRows.length - 1];
                             const nameLink = targetRow.querySelector('td:first-child a');
                             if (nameLink) nameLink.click();
-                        }}
-                    }}''')
+                        }
+                    }''', display_name)
 
                 self.popup = await popup_info.value
                 await self.popup.wait_for_load_state('domcontentloaded')

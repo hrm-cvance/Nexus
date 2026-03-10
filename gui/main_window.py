@@ -51,6 +51,7 @@ class NexusMainWindow(ctk.CTk):
         if not is_valid:
             logger.error(f"Configuration errors: {errors}")
             self._show_config_error(errors)
+            self.after(100, self.destroy)
             return
 
         # Initialize services

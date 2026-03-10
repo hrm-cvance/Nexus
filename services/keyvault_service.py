@@ -204,5 +204,11 @@ class KeyVaultService:
             logger.error(f"Key Vault connection test failed: {e}")
             return False
 
+    @classmethod
+    def reset(cls):
+        """Reset the singleton so it can be re-initialized with new credentials (e.g., after sign-out/sign-in)"""
+        cls._instance = None
+        cls._cache = {}
+
     def __repr__(self):
         return f"<KeyVaultService {self.vault_url}>"

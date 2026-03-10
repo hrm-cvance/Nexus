@@ -748,6 +748,7 @@ class AutomationStatusTab:
 
     def _run_automation_thread(self):
         """Run automation in background thread"""
+        loop = None
         try:
             # Create new event loop for this thread
             loop = asyncio.new_event_loop()
@@ -759,7 +760,8 @@ class AutomationStatusTab:
         except Exception as e:
             logger.error(f"Error in automation thread: {e}")
         finally:
-            loop.close()
+            if loop is not None:
+                loop.close()
 
     async def _run_automation(self):
         """Run automation for all vendors"""
@@ -1026,7 +1028,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
-            dialog_result_holder['ready'].wait(timeout=300)  # 5 minute timeout
+            while not dialog_result_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             result = dialog_result_holder['result']
             if result:
@@ -1144,7 +1147,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
-            dialog_result_holder['ready'].wait(timeout=300)  # 5 minute timeout
+            while not dialog_result_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             result = dialog_result_holder['result']
             if result:
@@ -1184,7 +1188,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_confirm_dialog)
 
             # Wait for dialog result
-            confirm_result_holder['ready'].wait(timeout=300)
+            while not confirm_result_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             if confirm_result_holder['result']:
                 logger.info("User confirmed to proceed with duplicate name")
@@ -1415,7 +1420,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
-            email_dialog_holder['ready'].wait(timeout=300)  # 5 minute timeout
+            while not email_dialog_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             result = email_dialog_holder['result']
             if result:
@@ -1528,7 +1534,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
-            dialog_result_holder['ready'].wait(timeout=300)  # 5 minute timeout
+            while not dialog_result_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             result = dialog_result_holder['result']
             if result:
@@ -1571,7 +1578,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
-            email_dialog_holder['ready'].wait(timeout=300)  # 5 minute timeout
+            while not email_dialog_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             result = email_dialog_holder['result']
             if result:
@@ -1685,7 +1693,8 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
-            email_dialog_holder['ready'].wait(timeout=300)  # 5 minute timeout
+            while not email_dialog_holder['ready'].wait(timeout=0.1):
+                await asyncio.sleep(0.1)
 
             result = email_dialog_holder['result']
             if result:
@@ -1910,6 +1919,7 @@ class AutomationStatusTab:
         self.current_user = None
         self.vendors = []
         self.vendor_status = {}
+        self.automation_summary = None
 
         # Clear UI
         for widget in self.vendors_container.winfo_children():

@@ -164,6 +164,7 @@ class BankVODAutomation:
         except Exception as e:
             logger.error(f"Error during BankVOD automation: {e}")
             result['errors'].append(str(e))
+            result['success'] = False
 
         finally:
             # Close browser

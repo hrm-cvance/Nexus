@@ -10,7 +10,7 @@ Handles Microsoft authentication using MSAL with delegated permissions:
 
 import os
 import msal
-from typing import List, Optional
+from typing import Dict, List, Optional
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -125,6 +125,8 @@ class AuthService:
                 logger.error(f"Sign-in failed: {error_desc}")
                 raise AuthenticationError(f"Sign-in failed: {error_desc}")
 
+        except AuthenticationError:
+            raise
         except Exception as e:
             logger.error(f"Authentication error: {str(e)}")
             raise AuthenticationError(f"Authentication failed: {str(e)}")
