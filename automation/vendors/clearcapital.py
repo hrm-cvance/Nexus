@@ -19,7 +19,6 @@ Process:
 
 import asyncio
 import json
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, Awaitable
 from playwright.async_api import async_playwright, Page, Browser, Playwright
@@ -27,8 +26,9 @@ from playwright.async_api import async_playwright, Page, Browser, Playwright
 from models.user import EntraUser
 from services.keyvault_service import KeyVaultService
 from utils.screenshot import safe_screenshot
+from utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ClearCapitalAutomation:

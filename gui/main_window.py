@@ -3,9 +3,9 @@ Main Window - Nexus GUI Application
 
 Main application window with tabbed interface:
 - Tab 1: User Search
-- Tab 2: Account Provisioning (placeholder)
-- Tab 3: Automation Status (placeholder)
-- Tab 4: Settings (placeholder)
+- Tab 2: Account Provisioning
+- Tab 3: Automation Status
+- Tab 4: Summary
 """
 
 import os

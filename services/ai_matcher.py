@@ -154,6 +154,7 @@ The confidence should be a number between 0 and 1.
         # Score each role based on keyword matches
         best_role = None
         best_score = 0
+        best_keywords = []
 
         for role in available_roles:
             score = 0

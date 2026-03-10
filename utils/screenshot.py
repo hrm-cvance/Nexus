@@ -65,19 +65,6 @@ def get_screenshot_path(filename: str) -> Path:
     return get_screenshot_dir() / filename
 
 
-def get_debug_file_path(filename: str) -> Path:
-    """
-    Get the full path for a debug file (HTML dumps, etc.).
-
-    Args:
-        filename: Debug filename (e.g., 'certifiedcredit_login_page.html')
-
-    Returns:
-        Full path in the writable screenshot directory
-    """
-    return get_screenshot_dir() / filename
-
-
 async def safe_screenshot(page, filename: str) -> bool:
     """
     Take a screenshot safely — never raises, always uses writable directory.
@@ -111,7 +98,7 @@ def safe_save_debug_html(content: str, filename: str) -> bool:
         True if file was saved, False if it failed
     """
     try:
-        path = get_debug_file_path(filename)
+        path = get_screenshot_path(filename)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         logger.debug(f"Debug file saved: {path}")

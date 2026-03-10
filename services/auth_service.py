@@ -10,7 +10,7 @@ Handles Microsoft authentication using MSAL with delegated permissions:
 
 import os
 import msal
-from typing import List, Optional, Dict
+from typing import List, Optional
 from utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -35,7 +35,6 @@ class AuthService:
         """
         self.tenant_id = tenant_id
         self.client_id = client_id
-        self.redirect_uri = redirect_uri
         self.authority = f"https://login.microsoftonline.com/{tenant_id}"
 
         # Set up persistent token cache
@@ -179,16 +178,6 @@ class AuthService:
         """Check if user is currently authenticated"""
         accounts = self.msal_app.get_accounts()
         return len(accounts) > 0
-
-    def get_current_user(self) -> Optional[Dict]:
-        """Get current signed-in user account info"""
-        if self.current_account:
-            return {
-                "username": self.current_account.get("username"),
-                "name": self.current_account.get("name"),
-                "environment": self.current_account.get("environment")
-            }
-        return None
 
     def get_current_username(self) -> Optional[str]:
         """Get username of current signed-in user"""

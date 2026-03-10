@@ -138,7 +138,6 @@ class SummaryTab:
             widget.destroy()
 
         # Update header
-        self.title_label.configure(text="Automation Complete")
         self.subtitle_label.configure(
             text=f"Provisioning for {summary.user.display_name} - "
                  f"{summary.success_count} of {len(summary.vendor_results)} successful"

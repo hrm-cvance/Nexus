@@ -53,7 +53,7 @@ class TheWorkNumberAutomation:
         user: EntraUser,
         headless: bool = False,
         on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None,
-        on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+        on_email_conflict: Optional[Callable[[str, str, str], Awaitable[Optional[Dict[str, str]]]]] = None
     ) -> Dict[str, Any]:
         """
         Create a The Work Number account for the given user
@@ -64,9 +64,9 @@ class TheWorkNumberAutomation:
             on_username_conflict: Async callback when username is taken.
                 Receives (display_name, attempted_username).
                 Should return new username to try, or None to skip this vendor.
-            on_email_conflict: Async callback when email is taken.
-                Receives (display_name, attempted_email).
-                Should return new email to try, or None to skip this vendor.
+            on_email_conflict: Async callback when email/username is taken.
+                Receives (display_name, attempted_email, attempted_username).
+                Should return dict with 'username' and 'email' keys, or None to skip.
 
         Returns:
             Dict with success status and messages
@@ -1346,7 +1346,7 @@ async def provision_user(
     config_path: str,
     api_key: Optional[str] = None,
     on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None,
-    on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
+    on_email_conflict: Optional[Callable[[str, str, str], Awaitable[Optional[Dict[str, str]]]]] = None
 ) -> Dict[str, Any]:
     """
     Main entry point for The Work Number user provisioning
@@ -1358,9 +1358,9 @@ async def provision_user(
         on_username_conflict: Async callback when username is taken.
             Receives (display_name, attempted_username).
             Should return new username to try, or None to skip this vendor.
-        on_email_conflict: Async callback when email is taken.
-            Receives (display_name, attempted_email).
-            Should return new email to try, or None to skip this vendor.
+        on_email_conflict: Async callback when email/username is taken.
+            Receives (display_name, attempted_email, attempted_username).
+            Should return dict with 'username' and 'email' keys, or None to skip.
 
     Returns:
         Dict with provisioning result
