@@ -9,7 +9,6 @@ This application automates the creation of vendor accounts by:
 """
 
 import sys
-import os
 import subprocess
 from pathlib import Path
 

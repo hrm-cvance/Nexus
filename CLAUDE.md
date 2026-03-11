@@ -56,7 +56,7 @@ automation/vendors/
   experience.py                  # Experience.com automation (currently disabled)
 models/
   user.py                        # EntraUser model
-  vendor.py                      # VendorConfig model
+  vendor.py                      # VendorConfig model (name, display_name, entra_group_name, UI state)
   automation_result.py           # Automation result models
 Vendors/{VendorName}/
   config.json                    # Vendor-specific config (org, roles, URLs)

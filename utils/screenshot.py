@@ -10,7 +10,6 @@ Provides safe screenshot and HTML debug file saving that:
 import os
 import logging
 from pathlib import Path
-from typing import Union
 
 logger = logging.getLogger('Nexus.utils.screenshot')
 

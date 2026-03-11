@@ -240,11 +240,10 @@ class NexusMainWindow(ctk.CTk):
         """Callback when Start New Automation is clicked from Summary tab"""
         logger.info("Starting new automation session")
 
-        # Clear summary tab
+        # Clear all tabs
         self.tab_summary.clear()
-
-        # Clear automation tab
         self.tab_automation.clear()
+        self.tab_provisioning.clear()
 
         # Switch to User Search tab
         self.tabview.set("User Search")
@@ -288,7 +287,6 @@ class NexusMainWindow(ctk.CTk):
             # LoadImage flags
             IMAGE_ICON = 1
             LR_LOADFROMFILE = 0x0010
-            LR_DEFAULTSIZE = 0x0040
 
             # WM_SETICON constants
             WM_SETICON = 0x0080

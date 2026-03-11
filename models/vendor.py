@@ -14,12 +14,10 @@ class VendorConfig:
     name: str
     display_name: str
     entra_group_name: Optional[str] = None
-    automation_module: Optional[str] = None
-    enabled: bool = True
 
     # UI state
     is_selected: bool = False
     is_auto_detected: bool = False
 
     def __repr__(self):
-        return f"<VendorConfig {self.display_name} (enabled={self.enabled})>"
+        return f"<VendorConfig {self.display_name}>"

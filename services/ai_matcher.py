@@ -7,7 +7,6 @@ Provides suggestions with confidence levels for fields like Role, Branch, etc.
 
 import json
 from typing import Optional, Dict, Any, List
-from pathlib import Path
 from utils.logger import get_logger
 
 # Try to import anthropic, but don't fail if not available
