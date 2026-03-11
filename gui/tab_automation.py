@@ -1038,8 +1038,13 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
+            waited = 0
             while not dialog_result_holder['ready'].wait(timeout=0.1):
                 await asyncio.sleep(0.1)
+                waited += 0.2
+                if waited > 300:  # 5 minute timeout
+                    logger.error("Conflict dialog timed out after 5 minutes")
+                    return None
 
             result = dialog_result_holder['result']
             if result:
@@ -1157,8 +1162,13 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
+            waited = 0
             while not dialog_result_holder['ready'].wait(timeout=0.1):
                 await asyncio.sleep(0.1)
+                waited += 0.2
+                if waited > 300:  # 5 minute timeout
+                    logger.error("Conflict dialog timed out after 5 minutes")
+                    return None
 
             result = dialog_result_holder['result']
             if result:
@@ -1317,8 +1327,13 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
+            waited = 0
             while not dialog_result_holder['ready'].wait(timeout=0.1):
                 await asyncio.sleep(0.1)
+                waited += 0.2
+                if waited > 300:  # 5 minute timeout
+                    logger.error("Conflict dialog timed out after 5 minutes")
+                    return None
 
             result = dialog_result_holder['result']
             if result:
@@ -1544,8 +1559,13 @@ class AutomationStatusTab:
             self.parent.after(0, show_dialog)
 
             # Wait for dialog result (with timeout)
+            waited = 0
             while not dialog_result_holder['ready'].wait(timeout=0.1):
                 await asyncio.sleep(0.1)
+                waited += 0.2
+                if waited > 300:  # 5 minute timeout
+                    logger.error("Conflict dialog timed out after 5 minutes")
+                    return None
 
             result = dialog_result_holder['result']
             if result:

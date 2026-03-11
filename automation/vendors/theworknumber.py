@@ -516,7 +516,7 @@ class TheWorkNumberAutomation:
     async def _handle_mfa(self):
         """Handle MFA/identity validation if required"""
         logger.info("Checking for MFA/identity validation...")
-        print("Checking for MFA/identity validation...")
+        logger.debug("Checking for MFA/identity validation...")
 
         # Check if the identity validation modal is present
         try:
@@ -524,30 +524,30 @@ class TheWorkNumberAutomation:
 
             # First check all frames for content
             all_frames = self.page.frames
-            print(f"Found {len(all_frames)} frames")
+            logger.debug(f"Found {len(all_frames)} frames")
 
             for i, frame in enumerate(all_frames):
                 try:
                     frame_content = await frame.content()
-                    print(f"Frame {i} content length: {len(frame_content)}")
+                    logger.debug(f"Frame {i} content length: {len(frame_content)}")
 
                     # Check for MFA indicators
                     mfa_keywords = ["validate your identity", "E-mail passcode", "one-time", "Additional information"]
                     for keyword in mfa_keywords:
                         if keyword.lower() in frame_content.lower():
                             mfa_detected = True
-                            print(f"MFA detected in frame {i} via keyword: {keyword}")
+                            logger.debug(f"MFA detected in frame {i} via keyword: {keyword}")
                             logger.info(f"MFA detected in frame {i} via keyword: {keyword}")
                             break
                     if mfa_detected:
                         break
                 except Exception as e:
-                    print(f"Error checking frame {i}: {e}")
+                    logger.debug(f"Error checking frame {i}: {e}")
                     continue
 
             if mfa_detected:
                 logger.info("MFA identity validation detected")
-                print("MFA identity validation detected - waiting for user to complete")
+                logger.debug("MFA identity validation detected - waiting for user to complete")
 
                 # Take screenshot
                 await safe_screenshot(self.page, 'theworknumber_mfa_page.png')
@@ -587,7 +587,7 @@ class TheWorkNumberAutomation:
                                             pass
                                         await elem.click()
                                         email_clicked = True
-                                        print(f"Clicked email option using selector: {selector}")
+                                        logger.debug(f"Clicked email option using selector: {selector}")
                                         logger.info(f"Clicked email option using selector: {selector}")
                                         break
                             except:
@@ -598,7 +598,7 @@ class TheWorkNumberAutomation:
                         continue
 
                 if not email_clicked:
-                    print("Could not auto-click email button - waiting for manual action")
+                    logger.debug("Could not auto-click email button - waiting for manual action")
                     logger.info("Could not auto-click email button - user should click manually")
 
                 await asyncio.sleep(2)
@@ -622,7 +622,7 @@ class TheWorkNumberAutomation:
                                 if btn and await btn.is_visible():
                                     await btn.click()
                                     send_code_clicked = True
-                                    print(f"Clicked send code button using: {selector}")
+                                    logger.debug(f"Clicked send code button using: {selector}")
                                     logger.info(f"Clicked send code button using: {selector}")
                                     break
                             except:
@@ -636,13 +636,13 @@ class TheWorkNumberAutomation:
                 await safe_screenshot(self.page, 'theworknumber_mfa_code_sent.png')
 
                 # Wait for user to manually enter the code
-                print("=" * 60)
-                print("MFA REQUIRED: Please complete the following steps:")
-                print("1. Click on your email address to receive the code")
-                print("2. Check your email for the one-time passcode")
-                print("3. Enter the code in the browser")
-                print("4. Click Submit/Continue to complete login")
-                print("=" * 60)
+                logger.debug("=" * 60)
+                logger.debug("MFA REQUIRED: Please complete the following steps:")
+                logger.debug("1. Click on your email address to receive the code")
+                logger.debug("2. Check your email for the one-time passcode")
+                logger.debug("3. Enter the code in the browser")
+                logger.debug("4. Click Submit/Continue to complete login")
+                logger.debug("=" * 60)
                 logger.info("Waiting for manual MFA completion (passcode entry)...")
 
                 # Poll for MFA completion - check that modal is dismissed
@@ -709,7 +709,7 @@ class TheWorkNumberAutomation:
                                 found_keyword = f"URL: {current_url}"
 
                         if found_keyword:
-                            print(f"MFA completed - modal dismissed, detected: {found_keyword}")
+                            logger.debug(f"MFA completed - modal dismissed, detected: {found_keyword}")
                             logger.info(f"MFA completed - modal dismissed, detected: {found_keyword}")
                             await safe_screenshot(self.page, 'theworknumber_mfa_complete.png')
                             await asyncio.sleep(2)
@@ -719,15 +719,15 @@ class TheWorkNumberAutomation:
                     if elapsed_time % 30 == 0:
                         frame_count = len(self.page.frames)
                         current_url = self.page.url
-                        print(f"Still waiting for MFA completion... ({elapsed_time}s elapsed, {frame_count} frames, URL: {current_url})")
+                        logger.debug(f"Still waiting for MFA completion... ({elapsed_time}s elapsed, {frame_count} frames, URL: {current_url})")
                         logger.info(f"MFA wait: {elapsed_time}s, mfa_still_present={mfa_still_present}, frames={frame_count}, url={current_url}")
 
                 raise Exception("MFA timeout - user did not complete MFA within 5 minutes")
             else:
-                print("No MFA required - continuing")
+                logger.debug("No MFA required - continuing")
                 logger.info("No MFA required")
         except Exception as e:
-            print(f"MFA handling exception: {e}")
+            logger.debug(f"MFA handling exception: {e}")
             if "MFA timeout" in str(e):
                 raise
             logger.info(f"MFA exception: {e}, continuing...")
@@ -754,7 +754,7 @@ class TheWorkNumberAutomation:
                     if element and await element.is_visible():
                         await element.click()
                         logger.info(f"Dismissed news modal using selector: {selector}")
-                        print(f"Dismissed news modal using selector: {selector}")
+                        logger.debug(f"Dismissed news modal using selector: {selector}")
                         await asyncio.sleep(1)
                         return True
                 except:
@@ -769,7 +769,7 @@ class TheWorkNumberAutomation:
                             if element and await element.is_visible():
                                 await element.click()
                                 logger.info(f"Dismissed news modal in frame using selector: {selector}")
-                                print(f"Dismissed news modal in frame using selector: {selector}")
+                                logger.debug(f"Dismissed news modal in frame using selector: {selector}")
                                 await asyncio.sleep(1)
                                 return True
                         except:
@@ -786,12 +786,12 @@ class TheWorkNumberAutomation:
     async def _navigate_to_user_management(self):
         """Navigate to User Management via direct URL"""
         logger.info("Navigating to User Management...")
-        print("Navigating to User Management...")
+        logger.debug("Navigating to User Management...")
 
         # Navigate directly to User Management URL (more reliable than clicking through menus)
         user_mgmt_url = "https://secure1.verifier.theworknumber.com/vsportal-ui/manager/users"
         logger.info(f"Navigating directly to: {user_mgmt_url}")
-        print(f"Navigating directly to: {user_mgmt_url}")
+        logger.debug(f"Navigating directly to: {user_mgmt_url}")
 
         await self.page.goto(user_mgmt_url)
 
@@ -814,7 +814,7 @@ class TheWorkNumberAutomation:
     async def _dismiss_tour(self):
         """Dismiss any tour/walkthrough popups that may appear (including Appcues tours in iframes)"""
         logger.info("Checking for tour popups...")
-        print("Checking for tour popups...")
+        logger.debug("Checking for tour popups...")
 
         # The Appcues tour uses iframes with class 'appcues-tooltip-container'
         # We need to access the iframe content to click the buttons
@@ -827,7 +827,7 @@ class TheWorkNumberAutomation:
             try:
                 appcues_container = await self.page.query_selector('.appcues-tooltip-container')
                 if appcues_container:
-                    print(f"  Found Appcues tooltip container (attempt {attempt + 1})")
+                    logger.debug(f"  Found Appcues tooltip container (attempt {attempt + 1})")
                     logger.info(f"Found Appcues tooltip container (attempt {attempt + 1})")
 
                     # Get the iframe content frame
@@ -860,7 +860,7 @@ class TheWorkNumberAutomation:
 
                                     await element.click()
                                     tour_dismissed = True
-                                    print(f"  Clicked Appcues button: '{btn_text.strip()}' ({selector})")
+                                    logger.debug(f"  Clicked Appcues button: '{btn_text.strip()}' ({selector})")
                                     logger.info(f"Clicked Appcues button: '{btn_text.strip()}' ({selector})")
                                     await asyncio.sleep(0.5)
                                     break
@@ -904,7 +904,7 @@ class TheWorkNumberAutomation:
 
                             await element.click()
                             tour_dismissed = True
-                            print(f"  Clicked tour button: '{btn_text.strip()}' ({selector})")
+                            logger.debug(f"  Clicked tour button: '{btn_text.strip()}' ({selector})")
                             logger.info(f"Clicked tour button: '{btn_text.strip()}' ({selector})")
                             await asyncio.sleep(0.5)
                             break
@@ -916,7 +916,7 @@ class TheWorkNumberAutomation:
 
             if not tour_dismissed:
                 # No more tour popups found
-                print("  No more tour elements found")
+                logger.debug("  No more tour elements found")
                 break
 
             await asyncio.sleep(0.5)
@@ -924,17 +924,17 @@ class TheWorkNumberAutomation:
         # Final check - verify Appcues container is gone
         appcues_container = await self.page.query_selector('.appcues-tooltip-container')
         if appcues_container:
-            print("  WARNING: Appcues tour still present after dismissal attempts")
+            logger.debug("  WARNING: Appcues tour still present after dismissal attempts")
             logger.warning("Appcues tour still present after dismissal")
         else:
-            print("  Tour dismissed successfully")
+            logger.debug("  Tour dismissed successfully")
 
         logger.info("Tour check complete")
 
     async def _click_add_user(self):
         """Click Add User button"""
         logger.info("Clicking Add User...")
-        print("Clicking Add User...")
+        logger.debug("Clicking Add User...")
 
         await asyncio.sleep(1)
 
@@ -948,12 +948,12 @@ class TheWorkNumberAutomation:
         await safe_screenshot(self.page, 'theworknumber_after_tour_dismiss.png')
 
         # Wait for any loading spinner to disappear
-        print("Waiting for page to finish loading...")
+        logger.debug("Waiting for page to finish loading...")
         for _ in range(30):  # Wait up to 15 seconds
             loader = await self.page.query_selector('.loader-backdrop')
             if not loader:
                 break
-            print("  Loading spinner still present, waiting...")
+            logger.debug("  Loading spinner still present, waiting...")
             await asyncio.sleep(0.5)
 
         # Wait for Add User button to be visible
@@ -970,7 +970,7 @@ class TheWorkNumberAutomation:
                 if element and await element.is_visible():
                     await element.click()
                     add_user_clicked = True
-                    print(f"Clicked Add User with selector: {selector}")
+                    logger.debug(f"Clicked Add User with selector: {selector}")
                     logger.info(f"Clicked Add User with selector: {selector}")
                     break
             except:

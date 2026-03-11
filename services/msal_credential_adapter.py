@@ -59,37 +59,31 @@ class MSALCredentialAdapter(TokenCredential):
         logger.debug(f"Getting token for scopes: {requested_scopes}")
 
         try:
-            # Try to get token silently first (from cache)
-            token_str = self.auth_service.get_token_silent(requested_scopes)
+            token_str = None
+            expires_on_timestamp = None
+
+            # Try to get token silently first (from cache/refresh)
+            accounts = self.auth_service.msal_app.get_accounts()
+            if accounts:
+                result = self.auth_service.msal_app.acquire_token_silent(
+                    scopes=requested_scopes,
+                    account=accounts[0]
+                )
+                if result and "access_token" in result:
+                    token_str = result["access_token"]
+                    expires_on_timestamp = result.get("expires_on",
+                        int(datetime.now(timezone.utc).timestamp()) + 3600)
+                    logger.debug("Token acquired silently")
+                    # Save cache in case refresh occurred
+                    self.auth_service._save_cache()
 
             if not token_str:
                 # Token not in cache, need to sign in interactively
                 logger.info("No cached token, requesting interactive sign-in")
                 result = self.auth_service.sign_in_interactive(requested_scopes)
                 token_str = result.get("access_token")
-                expires_on = result.get("expires_in", 3600)  # Default 1 hour
-
-                # Convert expires_in (seconds from now) to expires_on (Unix timestamp)
-                expires_on_timestamp = int(datetime.now(timezone.utc).timestamp()) + expires_on
-            else:
-                # We have a cached token, but we don't have expires_on
-                # Request it again silently to get full token info
-                accounts = self.auth_service.msal_app.get_accounts()
-                if accounts:
-                    result = self.auth_service.msal_app.acquire_token_silent(
-                        scopes=requested_scopes,
-                        account=accounts[0]
-                    )
-                    if result and "access_token" in result:
-                        token_str = result["access_token"]
-                        expires_on_timestamp = result.get("expires_on",
-                            int(datetime.now(timezone.utc).timestamp()) + 3600)
-                    else:
-                        # Fallback: assume 1 hour expiration
-                        expires_on_timestamp = int(datetime.now(timezone.utc).timestamp()) + 3600
-                else:
-                    # No account info, assume 1 hour
-                    expires_on_timestamp = int(datetime.now(timezone.utc).timestamp()) + 3600
+                expires_in = result.get("expires_in", 3600)
+                expires_on_timestamp = int(datetime.now(timezone.utc).timestamp()) + expires_in
 
             if not token_str:
                 raise Exception("Failed to acquire access token")

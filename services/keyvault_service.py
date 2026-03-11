@@ -27,13 +27,13 @@ class KeyVaultService:
     """Service for retrieving vendor credentials from Azure Key Vault - NO FALLBACK"""
 
     _instance = None
-    _cache: Dict[str, str] = {}
 
     def __new__(cls, *args, **kwargs):
         """Singleton pattern to reuse client connection"""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
             cls._instance._initialized = False
+            cls._instance._cache = {}
         return cls._instance
 
     def __init__(self, vault_url: Optional[str] = None, credential=None, skip_connection_test: bool = False):
@@ -208,7 +208,6 @@ class KeyVaultService:
     def reset(cls):
         """Reset the singleton so it can be re-initialized with new credentials (e.g., after sign-out/sign-in)"""
         cls._instance = None
-        cls._cache = {}
 
     def __repr__(self):
         return f"<KeyVaultService {self.vault_url}>"
