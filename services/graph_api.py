@@ -140,21 +140,24 @@ class GraphAPIClient:
 
         # Use $search for display name (better fuzzy matching)
         # Use $filter for exact matches (email, employee ID)
+        # Sanitize: escape single quotes for OData $filter, strip double quotes for $search
+        safe_filter = query.replace("'", "''")
+        safe_search = query.replace('"', '')
         if search_type == SearchType.DISPLAY_NAME:
             # $search provides better partial matching (searches displayName and mail)
-            params["$search"] = f'"displayName:{query}" OR "mail:{query}"'
+            params["$search"] = f'"displayName:{safe_search}" OR "mail:{safe_search}"'
             params["$count"] = "true"
             params["$orderby"] = "displayName"
             # Add ConsistencyLevel header for advanced query
             params["ConsistencyLevel"] = "eventual"
         elif search_type == SearchType.EMAIL:
-            params["$filter"] = f"startswith(mail,'{query}') or startswith(userPrincipalName,'{query}')"
+            params["$filter"] = f"startswith(mail,'{safe_filter}') or startswith(userPrincipalName,'{safe_filter}')"
         elif search_type == SearchType.FIRST_NAME:
-            params["$filter"] = f"startswith(givenName,'{query}')"
+            params["$filter"] = f"startswith(givenName,'{safe_filter}')"
         elif search_type == SearchType.LAST_NAME:
-            params["$filter"] = f"startswith(surname,'{query}')"
+            params["$filter"] = f"startswith(surname,'{safe_filter}')"
         else:
-            params["$filter"] = f"{search_type.value} eq '{query}'"
+            params["$filter"] = f"{search_type.value} eq '{safe_filter}'"
 
         try:
             response = self._make_request("GET", "/users", params=params)

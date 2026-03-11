@@ -168,10 +168,11 @@ class CertifiedCreditAutomation:
             if final_save.get('success') or final_save.get('type') == 'success':
                 result['messages'].append("✓ User created successfully")
                 result['success'] = True
+                logger.info(f"✓ Successfully created Certified Credit account for {user.display_name}")
             else:
                 result['errors'].append(f"✗ Final save failed: {final_save.get('message', 'Unknown error')}")
                 result['success'] = False
-            logger.info(f"✓ Successfully created Certified Credit account for {user.display_name}")
+                logger.error(f"✗ Final save failed for Certified Credit account: {user.display_name}")
 
         except Exception as e:
             error_msg = f"Error during Certified Credit automation: {str(e)}"

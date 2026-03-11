@@ -827,6 +827,16 @@ class AutomationStatusTab:
                 is_pw_error, friendly_msg = detect_playwright_error(str(e))
                 self._add_vendor_message(vendor.name, f"✗ Error: {friendly_msg}", color="red")
                 self._update_vendor_status(vendor.name, "error", "✗ Failed")
+                # Ensure summary includes this failure
+                vendor_result = VendorResult(
+                    vendor_name=vendor.name,
+                    display_name=vendor.display_name,
+                    success=False,
+                    start_time=datetime.now(),
+                    end_time=datetime.now(),
+                    errors=[friendly_msg]
+                )
+                self.automation_summary.vendor_results.append(vendor_result)
 
         # All done
         logger.info("Automation complete")

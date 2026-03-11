@@ -111,6 +111,8 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 
 ### Authentication & Key Vault Credential Flow
 - `AuthService` uses MSAL's `SerializableTokenCache` to persist tokens to `%LOCALAPPDATA%\Nexus\token_cache.bin`
+- Token cache is encrypted at rest using Windows DPAPI (`CryptProtectData`/`CryptUnprotectData` via ctypes), binding it to the current Windows user
+- Plaintext caches from older versions are auto-migrated: loaded and re-encrypted on next save
 - On startup, cached accounts are restored so users are auto-authenticated without a browser sign-in
 - Sign-out deletes the cache file entirely (not just cleared in memory)
 - Refresh tokens persist for ~90 days of inactivity; after that, a fresh browser sign-in is required

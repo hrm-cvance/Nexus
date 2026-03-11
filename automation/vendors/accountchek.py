@@ -534,12 +534,21 @@ class AccountChekAutomation:
 
     async def _close_browser(self):
         """Close browser and cleanup"""
-        if self.page:
-            await self.page.close()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        try:
+            if self.page:
+                await self.page.close()
+        except Exception:
+            pass
+        try:
+            if self.browser:
+                await self.browser.close()
+        except Exception:
+            pass
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+        except Exception:
+            pass
         logger.info("Browser closed")
 
 

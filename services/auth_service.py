@@ -9,6 +9,8 @@ Handles Microsoft authentication using MSAL with delegated permissions:
 """
 
 import os
+import ctypes
+import ctypes.wintypes
 import msal
 from typing import Dict, List, Optional
 from utils.logger import get_logger
@@ -56,24 +58,72 @@ class AuthService:
 
         logger.info(f"AuthService initialized for tenant {tenant_id}")
 
+    def _dpapi_encrypt(self, data: bytes) -> bytes:
+        """Encrypt data using Windows DPAPI (bound to current user)"""
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", ctypes.wintypes.DWORD),
+                        ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        input_blob = DATA_BLOB(len(data), ctypes.create_string_buffer(data, len(data)))
+        output_blob = DATA_BLOB()
+
+        if not ctypes.windll.crypt32.CryptProtectData(
+            ctypes.byref(input_blob), None, None, None, None, 0,
+            ctypes.byref(output_blob)
+        ):
+            raise OSError("DPAPI CryptProtectData failed")
+
+        encrypted = ctypes.string_at(output_blob.pbData, output_blob.cbData)
+        ctypes.windll.kernel32.LocalFree(output_blob.pbData)
+        return encrypted
+
+    def _dpapi_decrypt(self, data: bytes) -> bytes:
+        """Decrypt data using Windows DPAPI (bound to current user)"""
+        class DATA_BLOB(ctypes.Structure):
+            _fields_ = [("cbData", ctypes.wintypes.DWORD),
+                        ("pbData", ctypes.POINTER(ctypes.c_char))]
+
+        input_blob = DATA_BLOB(len(data), ctypes.create_string_buffer(data, len(data)))
+        output_blob = DATA_BLOB()
+
+        if not ctypes.windll.crypt32.CryptUnprotectData(
+            ctypes.byref(input_blob), None, None, None, None, 0,
+            ctypes.byref(output_blob)
+        ):
+            raise OSError("DPAPI CryptUnprotectData failed")
+
+        decrypted = ctypes.string_at(output_blob.pbData, output_blob.cbData)
+        ctypes.windll.kernel32.LocalFree(output_blob.pbData)
+        return decrypted
+
     def _load_cache(self):
-        """Load token cache from disk if it exists"""
+        """Load token cache from disk if it exists (DPAPI-encrypted, with plaintext migration)"""
         if os.path.exists(self._cache_path):
             try:
-                with open(self._cache_path, "r") as f:
-                    self.token_cache.deserialize(f.read())
-                logger.info("Token cache loaded from disk")
+                with open(self._cache_path, "rb") as f:
+                    raw = f.read()
+                # Try DPAPI decryption first
+                try:
+                    decrypted = self._dpapi_decrypt(raw)
+                    self.token_cache.deserialize(decrypted.decode("utf-8"))
+                    logger.info("Token cache loaded from disk (encrypted)")
+                except OSError:
+                    # Fall back to plaintext (pre-encryption cache) and re-encrypt on next save
+                    self.token_cache.deserialize(raw.decode("utf-8"))
+                    self.token_cache.has_state_changed = True
+                    logger.info("Token cache loaded from disk (plaintext, will re-encrypt on save)")
             except Exception as e:
                 logger.warning(f"Failed to load token cache: {e}")
 
     def _save_cache(self):
-        """Save token cache to disk if it has changed"""
+        """Save token cache to disk with DPAPI encryption"""
         if self.token_cache.has_state_changed:
             try:
                 os.makedirs(self._cache_dir, exist_ok=True)
-                with open(self._cache_path, "w") as f:
-                    f.write(self.token_cache.serialize())
-                logger.info("Token cache saved to disk")
+                encrypted = self._dpapi_encrypt(self.token_cache.serialize().encode("utf-8"))
+                with open(self._cache_path, "wb") as f:
+                    f.write(encrypted)
+                logger.info("Token cache saved to disk (encrypted)")
             except Exception as e:
                 logger.warning(f"Failed to save token cache: {e}")
 

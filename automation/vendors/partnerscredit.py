@@ -651,10 +651,16 @@ class PartnersCreditAutomation:
     async def _cleanup(self):
         """Clean up browser resources"""
         logger.info("Cleaning up browser...")
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        try:
+            if self.browser:
+                await self.browser.close()
+        except Exception:
+            pass
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+        except Exception:
+            pass
         logger.info("Browser closed")
 
 
