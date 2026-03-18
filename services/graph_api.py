@@ -60,7 +60,7 @@ class GraphAPIClient:
             "Content-Type": "application/json"
         }
 
-    def _make_request(self, method: str, endpoint: str, params: Dict = None) -> Dict:
+    def _make_request(self, method: str, endpoint: str, params: Dict = None, extra_headers: Dict = None) -> Dict:
         """
         Make authenticated request to Graph API
 
@@ -82,6 +82,10 @@ class GraphAPIClient:
         if params and "ConsistencyLevel" in params:
             headers["ConsistencyLevel"] = params["ConsistencyLevel"]
             del params["ConsistencyLevel"]  # Remove from params, it's a header
+
+        # Merge any extra headers (e.g., Prefer for mail content type)
+        if extra_headers:
+            headers.update(extra_headers)
 
         try:
             response = requests.request(
@@ -239,6 +243,70 @@ class GraphAPIClient:
 
         except Exception as e:
             logger.error(f"Failed to get user groups: {e}")
+            return []
+
+    def read_recent_emails(self, mailbox: str, subject_filter: str = None,
+                           since_timestamp: str = None, minutes_ago: int = 5) -> List[Dict]:
+        """
+        Read recent emails from a mailbox (requires Mail.Read.Shared and Full Access delegation).
+
+        Args:
+            mailbox: UPN of the mailbox to read (e.g., nexus@highlandsmortgage.com)
+            subject_filter: Optional keyword to filter by subject (server-side)
+            since_timestamp: ISO 8601 UTC timestamp floor (e.g., 2026-03-18T12:00:00Z).
+                             If provided, overrides minutes_ago.
+            minutes_ago: Fallback time window if since_timestamp not provided (default: 5)
+
+        Returns:
+            List of message dicts, or empty list on any error
+        """
+        from datetime import datetime, timedelta, timezone
+
+        logger.info(f"Reading recent emails from {mailbox}")
+
+        # Build receivedDateTime filter
+        if since_timestamp:
+            time_filter = f"receivedDateTime ge {since_timestamp}"
+        else:
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)
+            time_filter = f"receivedDateTime ge {cutoff.strftime('%Y-%m-%dT%H:%M:%SZ')}"
+
+        # Build full OData filter
+        odata_filter = time_filter
+        if subject_filter:
+            safe_subject = subject_filter.replace("'", "''")
+            odata_filter += f" and contains(subject,'{safe_subject}')"
+
+        params = {
+            "$filter": odata_filter,
+            "$orderby": "receivedDateTime desc",
+            "$top": 5,
+            "$select": "id,subject,body,from,receivedDateTime,isRead"
+        }
+
+        extra_headers = {
+            "Prefer": 'outlook.body-content-type="text"'
+        }
+
+        try:
+            response = self._make_request(
+                "GET", f"/users/{mailbox}/messages",
+                params=params, extra_headers=extra_headers
+            )
+            messages = response.get("value", [])
+            logger.info(f"Found {len(messages)} recent email(s) in {mailbox}")
+            return messages
+
+        except GraphAPIError as e:
+            if "403" in str(e) or "Insufficient permissions" in str(e):
+                logger.warning(f"Cannot read mailbox {mailbox}: {e}. "
+                              f"Ensure Mail.Read.Shared is consented and Full Access is granted.")
+            else:
+                logger.warning(f"Failed to read emails from {mailbox}: {e}")
+            return []
+
+        except Exception as e:
+            logger.warning(f"Unexpected error reading emails from {mailbox}: {e}")
             return []
 
     def __repr__(self):
