@@ -548,10 +548,14 @@ class TheWorkNumberAutomation:
 
         return False
 
-    async def _auto_enter_mfa_code(self) -> bool:
+    async def _auto_enter_mfa_code(self, send_time: str = None) -> bool:
         """
         Attempt to automatically read OTP from nexus@ inbox and enter it.
         Returns True on success, False on any failure (caller falls back to manual).
+
+        Args:
+            send_time: ISO 8601 UTC timestamp from when "Send code" was clicked.
+                       Used as floor for email search to avoid stale OTPs.
         """
         if not self.graph_client:
             logger.info("No graph_client available - skipping auto MFA entry")
@@ -561,7 +565,8 @@ class TheWorkNumberAutomation:
         import re
 
         mailbox = "nexus@highlandsmortgage.com"
-        send_time = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+        if not send_time:
+            send_time = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
         logger.info(f"Attempting auto MFA code entry from {mailbox}")
 
@@ -754,18 +759,18 @@ class TheWorkNumberAutomation:
                                             elem_text = await elem.text_content()
                                             if elem_text and 'none' in elem_text.lower():
                                                 continue
-                                        except:
+                                        except Exception:
                                             pass
                                         await elem.click()
                                         email_clicked = True
                                         logger.debug(f"Clicked email option using selector: {selector}")
                                         logger.info(f"Clicked email option using selector: {selector}")
                                         break
-                            except:
+                            except Exception:
                                 continue
                             if email_clicked:
                                 break
-                    except:
+                    except Exception:
                         continue
 
                 if not email_clicked:
@@ -796,15 +801,19 @@ class TheWorkNumberAutomation:
                                     logger.debug(f"Clicked send code button using: {selector}")
                                     logger.info(f"Clicked send code button using: {selector}")
                                     break
-                            except:
+                            except Exception:
                                 continue
-                    except:
+                    except Exception:
                         continue
 
                 await asyncio.sleep(2)
 
+                # Record timestamp for email filtering (before any delay)
+                from datetime import datetime, timezone
+                send_code_time = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
                 # Try automatic OTP entry first
-                auto_success = await self._auto_enter_mfa_code()
+                auto_success = await self._auto_enter_mfa_code(send_time=send_code_time)
                 if auto_success:
                     logger.info("MFA completed via automatic OTP entry")
                     return
@@ -850,7 +859,7 @@ class TheWorkNumberAutomation:
                                     break
                             if mfa_still_present:
                                 break
-                        except:
+                        except Exception:
                             continue
 
                     if not mfa_still_present:
