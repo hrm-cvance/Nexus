@@ -11,7 +11,6 @@ import requests
 from typing import List, Optional, Dict
 from enum import Enum
 
-from services.auth_service import AuthService
 from models.user import EntraUser, EntraGroup
 from utils.logger import get_logger
 
@@ -37,21 +36,30 @@ class GraphAPIClient:
 
     BASE_URL = "https://graph.microsoft.com/v1.0"
 
-    def __init__(self, auth_service: AuthService, scopes: List[str]):
+    def __init__(self, auth_service=None, scopes: List[str] = None, token_provider=None):
         """
         Initialize Graph API client
 
         Args:
-            auth_service: Authenticated AuthService instance
-            scopes: Required API scopes
+            auth_service: AuthService instance (delegated auth — used by GUI)
+            scopes: Required API scopes (used with auth_service)
+            token_provider: Callable(scopes) -> token_string (used by monitor).
+                            If provided, auth_service and scopes are ignored.
         """
-        self.auth_service = auth_service
-        self.scopes = scopes
+        if token_provider:
+            self._token_provider = token_provider
+            self._scopes = scopes or []
+        elif auth_service and scopes:
+            self._token_provider = lambda s: auth_service.get_token_silent(s)
+            self._scopes = scopes
+        else:
+            raise ValueError("Either token_provider or (auth_service + scopes) must be provided")
+
         logger.info("GraphAPIClient initialized")
 
     def _get_headers(self) -> Dict[str, str]:
         """Get authorization headers with current token"""
-        token = self.auth_service.get_token_silent(self.scopes)
+        token = self._token_provider(self._scopes)
         if not token:
             raise GraphAPIError("No access token available. Please sign in.")
 
@@ -246,9 +254,12 @@ class GraphAPIClient:
             return []
 
     def read_recent_emails(self, mailbox: str, subject_filter: str = None,
-                           since_timestamp: str = None, minutes_ago: int = 5) -> List[Dict]:
+                           since_timestamp: str = None, minutes_ago: int = 5,
+                           max_results: int = 5) -> List[Dict]:
         """
-        Read recent emails from a mailbox (requires Mail.Read.Shared and Full Access delegation).
+        Read recent emails from a mailbox.
+
+        Works with both delegated (Mail.Read.Shared) and application (Mail.Read) permissions.
 
         Args:
             mailbox: UPN of the mailbox to read (e.g., nexus@highlandsmortgage.com)
@@ -256,6 +267,7 @@ class GraphAPIClient:
             since_timestamp: ISO 8601 UTC timestamp floor (e.g., 2026-03-18T12:00:00Z).
                              If provided, overrides minutes_ago.
             minutes_ago: Fallback time window if since_timestamp not provided (default: 5)
+            max_results: Maximum number of messages to return (default: 5)
 
         Returns:
             List of message dicts, or empty list on any error
@@ -280,7 +292,7 @@ class GraphAPIClient:
         params = {
             "$filter": odata_filter,
             "$orderby": "receivedDateTime desc",
-            "$top": 5,
+            "$top": max_results,
             "$select": "id,subject,body,from,receivedDateTime,isRead"
         }
 
@@ -309,5 +321,35 @@ class GraphAPIClient:
             logger.warning(f"Unexpected error reading emails from {mailbox}: {e}")
             return []
 
+    def get_message_attachments(self, mailbox: str, message_id: str) -> List[Dict]:
+        """
+        Get attachments for a specific email message.
+
+        Args:
+            mailbox: UPN of the mailbox (e.g., nexus@highlandsmortgage.com)
+            message_id: The message ID from read_recent_emails()
+
+        Returns:
+            List of attachment dicts with id, name, contentType, contentBytes
+        """
+        logger.info(f"Getting attachments for message {message_id[:20]}...")
+
+        params = {
+            "$select": "id,name,contentType,contentBytes"
+        }
+
+        try:
+            response = self._make_request(
+                "GET", f"/users/{mailbox}/messages/{message_id}/attachments",
+                params=params
+            )
+            attachments = response.get("value", [])
+            logger.info(f"Found {len(attachments)} attachment(s)")
+            return attachments
+
+        except GraphAPIError as e:
+            logger.warning(f"Failed to get attachments: {e}")
+            return []
+
     def __repr__(self):
-        return f"<GraphAPIClient connected={self.auth_service.is_authenticated()}>"
+        return "<GraphAPIClient>"
