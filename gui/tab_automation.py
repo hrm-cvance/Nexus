@@ -590,11 +590,13 @@ class AutomationStatusTab:
         self,
         parent: ctk.CTkFrame,
         config_manager: ConfigManager,
-        on_view_summary: Optional[Callable] = None
+        on_view_summary: Optional[Callable] = None,
+        graph_client=None
     ):
         self.parent = parent
         self.config_manager = config_manager
         self.on_view_summary = on_view_summary
+        self.graph_client = graph_client
 
         self.current_user: Optional[EntraUser] = None
         self.vendors: List[VendorConfig] = []
@@ -1646,6 +1648,7 @@ class AutomationStatusTab:
                 self.current_user,
                 str(config_path),
                 api_key=None,
+                graph_client=self.graph_client,
                 on_username_conflict=handle_username_conflict,
                 on_email_conflict=handle_email_conflict
             )

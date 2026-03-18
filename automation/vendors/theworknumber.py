@@ -24,16 +24,18 @@ logger = logging.getLogger('automation.vendors.theworknumber')
 class TheWorkNumberAutomation:
     """Handles The Work Number user provisioning automation"""
 
-    def __init__(self, config_path: str, keyvault: KeyVaultService):
+    def __init__(self, config_path: str, keyvault: KeyVaultService, graph_client=None):
         """
         Initialize The Work Number automation
 
         Args:
             config_path: Path to vendor config.json
             keyvault: KeyVaultService instance for credential retrieval
+            graph_client: Optional GraphAPIClient for email-based MFA
         """
         self.config_path = Path(config_path)
         self.keyvault = keyvault
+        self.graph_client = graph_client
         self.config = self._load_config()
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
@@ -1351,6 +1353,7 @@ async def provision_user(
     user: EntraUser,
     config_path: str,
     api_key: Optional[str] = None,
+    graph_client=None,
     on_username_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None,
     on_email_conflict: Optional[Callable[[str, str, str], Awaitable[Optional[Dict[str, str]]]]] = None
 ) -> Dict[str, Any]:
@@ -1377,7 +1380,7 @@ async def provision_user(
     keyvault = KeyVaultService()
 
     # Create automation instance
-    automation = TheWorkNumberAutomation(config_path, keyvault)
+    automation = TheWorkNumberAutomation(config_path, keyvault, graph_client=graph_client)
 
     # Run automation with callbacks
     result = await automation.create_account(

@@ -191,7 +191,8 @@ class NexusMainWindow(ctk.CTk):
         self.tab_automation = AutomationStatusTab(
             parent=self.tabview.tab("Automation Status"),
             config_manager=self.config_manager,
-            on_view_summary=self._on_view_summary
+            on_view_summary=self._on_view_summary,
+            graph_client=self.graph_client
         )
 
         # Initialize Tab 4: Summary
