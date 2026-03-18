@@ -24,6 +24,7 @@ credentials/
 
 # App config (contains real Azure tenant/client IDs and Key Vault URL)
 config/app_config.json
+config/monitor_config.json
 
 # User settings (may contain personal preferences)
 config/user_settings.json
@@ -213,6 +214,7 @@ test_data/
 
 # Keep example configs (templates)
 !config/app_config.example.json
+!config/monitor_config.example.json
 
 # Keep README images
 !README_images/

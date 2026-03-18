@@ -1,0 +1,6 @@
+{
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "polling_interval_minutes": 5,
+  "teams_webhook_url": "YOUR_POWER_AUTOMATE_WEBHOOK_URL",
+  "monitor_mailbox": "nexus@highlandsmortgage.com"
+}
