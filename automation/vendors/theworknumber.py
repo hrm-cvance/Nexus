@@ -515,6 +515,175 @@ class TheWorkNumberAutomation:
 
         logger.info("Login completed")
 
+    async def _check_dashboard_reached(self) -> bool:
+        """Check if we've reached the dashboard (MFA complete)"""
+        dashboard_keywords = ["New Order", "Order History", "User Management", "Verifiers", "Administration"]
+
+        # Check main page content
+        try:
+            page_content = await self.page.content()
+            for keyword in dashboard_keywords:
+                if keyword in page_content:
+                    logger.info(f"Dashboard detected via keyword: {keyword}")
+                    return True
+        except Exception:
+            pass
+
+        # Check all frames
+        for frame in self.page.frames:
+            try:
+                frame_content = await frame.content()
+                for keyword in dashboard_keywords:
+                    if keyword in frame_content:
+                        logger.info(f"Dashboard detected in frame via keyword: {keyword}")
+                        return True
+            except Exception:
+                continue
+
+        # Check URL as fallback
+        current_url = self.page.url
+        if 'vsportal' in current_url or 'dashboard' in current_url or 'home' in current_url:
+            logger.info(f"Dashboard detected via URL: {current_url}")
+            return True
+
+        return False
+
+    async def _auto_enter_mfa_code(self) -> bool:
+        """
+        Attempt to automatically read OTP from nexus@ inbox and enter it.
+        Returns True on success, False on any failure (caller falls back to manual).
+        """
+        if not self.graph_client:
+            logger.info("No graph_client available - skipping auto MFA entry")
+            return False
+
+        from datetime import datetime, timezone
+        import re
+
+        mailbox = "nexus@highlandsmortgage.com"
+        send_time = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        logger.info(f"Attempting auto MFA code entry from {mailbox}")
+
+        # Initial delay - give the email time to arrive
+        await asyncio.sleep(10)
+
+        # Poll for OTP email (every 10s, up to 2 minutes)
+        max_attempts = 12
+        for attempt in range(max_attempts):
+            logger.info(f"Polling inbox for OTP email (attempt {attempt + 1}/{max_attempts})...")
+
+            messages = self.graph_client.read_recent_emails(
+                mailbox=mailbox,
+                since_timestamp=send_time
+            )
+
+            # Client-side filter: look for emails from Equifax
+            for msg in messages:
+                sender = msg.get('from', {}).get('emailAddress', {}).get('address', '').lower()
+                subject = (msg.get('subject') or '').lower()
+
+                if 'equifax' not in sender and 'equifax' not in subject:
+                    continue
+
+                # Extract 6-digit OTP from plain text body
+                body_text = msg.get('body', {}).get('content', '')
+                otp_match = re.search(r'\b(\d{6})\b', body_text)
+
+                if not otp_match:
+                    logger.info(f"Found Equifax email but no 6-digit code. Subject: {msg.get('subject')}")
+                    continue
+
+                otp_code = otp_match.group(1)
+                logger.info(f"Extracted OTP code: {otp_code}")
+
+                # Find the code input field in the iframe
+                code_entered = False
+                code_selectors = [
+                    'input[type="text"]',
+                    'input[name*="code"]',
+                    'input[id*="code"]',
+                    'input[name*="otp"]',
+                    'input[id*="otp"]',
+                    'input.form-control[type="text"]',
+                ]
+
+                for frame in self.page.frames:
+                    if code_entered:
+                        break
+                    try:
+                        for selector in code_selectors:
+                            try:
+                                element = await frame.query_selector(selector)
+                                if element and await element.is_visible():
+                                    await element.fill(otp_code)
+                                    code_entered = True
+                                    logger.info(f"Entered OTP code using selector: {selector}")
+                                    break
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+
+                if not code_entered:
+                    logger.warning("Found OTP code but could not find input field")
+                    return False
+
+                await asyncio.sleep(1)
+                await safe_screenshot(self.page, 'theworknumber_mfa_auto_code_entered.png')
+
+                # Click Submit/Verify/Continue
+                submit_clicked = False
+                submit_selectors = [
+                    'input[value*="Verify"]',
+                    'button:has-text("Verify")',
+                    'input[value*="Submit"]',
+                    'button:has-text("Submit")',
+                    'input[value*="Continue"]',
+                    'button:has-text("Continue")',
+                ]
+
+                for frame in self.page.frames:
+                    if submit_clicked:
+                        break
+                    try:
+                        for selector in submit_selectors:
+                            try:
+                                btn = await frame.query_selector(selector)
+                                if btn and await btn.is_visible():
+                                    await btn.click()
+                                    submit_clicked = True
+                                    logger.info(f"Clicked submit using selector: {selector}")
+                                    break
+                            except Exception:
+                                continue
+                    except Exception:
+                        continue
+
+                if not submit_clicked:
+                    logger.warning("Entered OTP but could not find submit button")
+                    return False
+
+                await asyncio.sleep(3)
+                await safe_screenshot(self.page, 'theworknumber_mfa_auto_submitted.png')
+
+                # Verify we reached the dashboard
+                if await self._check_dashboard_reached():
+                    logger.info("Auto MFA completed successfully - dashboard reached")
+                    await safe_screenshot(self.page, 'theworknumber_mfa_auto_complete.png')
+                    return True
+                else:
+                    logger.warning("Auto MFA code submitted but dashboard not detected")
+                    return False
+
+            # No matching email yet - wait and retry
+            if attempt < max_attempts - 1:
+                logger.info("OTP email not found yet, waiting 10s...")
+                await asyncio.sleep(10)
+
+        logger.warning(f"OTP email not found after {max_attempts} attempts - falling back to manual")
+        return False
+
     async def _handle_mfa(self):
         """Handle MFA/identity validation if required"""
         logger.info("Checking for MFA/identity validation...")
@@ -634,6 +803,15 @@ class TheWorkNumberAutomation:
 
                 await asyncio.sleep(2)
 
+                # Try automatic OTP entry first
+                auto_success = await self._auto_enter_mfa_code()
+                if auto_success:
+                    logger.info("MFA completed via automatic OTP entry")
+                    return
+
+                # Auto-entry failed or unavailable - fall back to manual
+                logger.info("Falling back to manual MFA entry")
+
                 # Take screenshot after clicking email
                 await safe_screenshot(self.page, 'theworknumber_mfa_code_sent.png')
 
@@ -676,43 +854,8 @@ class TheWorkNumberAutomation:
                             continue
 
                     if not mfa_still_present:
-                        # MFA modal is gone — check dashboard in main page AND all frames
-                        dashboard_keywords = ["New Order", "Order History", "User Management", "Verifiers", "Administration"]
-
-                        # Check main page content
-                        found_keyword = None
-                        try:
-                            page_content = await self.page.content()
-                            for keyword in dashboard_keywords:
-                                if keyword in page_content:
-                                    found_keyword = keyword
-                                    break
-                        except:
-                            pass
-
-                        # Check all frames if not found in main page
-                        if not found_keyword:
-                            for frame in self.page.frames:
-                                try:
-                                    frame_content = await frame.content()
-                                    for keyword in dashboard_keywords:
-                                        if keyword in frame_content:
-                                            found_keyword = keyword
-                                            break
-                                    if found_keyword:
-                                        break
-                                except:
-                                    continue
-
-                        # Also check URL as a fallback indicator
-                        if not found_keyword:
-                            current_url = self.page.url
-                            if 'vsportal' in current_url or 'dashboard' in current_url or 'home' in current_url:
-                                found_keyword = f"URL: {current_url}"
-
-                        if found_keyword:
-                            logger.debug(f"MFA completed - modal dismissed, detected: {found_keyword}")
-                            logger.info(f"MFA completed - modal dismissed, detected: {found_keyword}")
+                        if await self._check_dashboard_reached():
+                            logger.info("MFA completed - dashboard reached")
                             await safe_screenshot(self.page, 'theworknumber_mfa_complete.png')
                             await asyncio.sleep(2)
                             return
