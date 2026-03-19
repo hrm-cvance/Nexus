@@ -468,6 +468,15 @@ class PartnersCreditAutomation:
         await safe_screenshot(self.page, 'partnerscredit_mfa_page.png')
 
         try:
+            # Check if we're already on the dashboard (MFA was skipped by server)
+            try:
+                page_content = await self.page.content()
+                if 'Admin' in page_content and 'Report Center' in page_content:
+                    logger.info("Already on dashboard - MFA was skipped (trusted IP/session)")
+                    return
+            except Exception:
+                pass
+
             # Step 1: Handle the public/private computer selection page (SecureAuth)
             private_radio = await self.page.query_selector('#ContentPlaceHolder1_RadioButtonListPublicPrivate_1')
             if private_radio:
