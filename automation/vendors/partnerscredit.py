@@ -504,7 +504,9 @@ class PartnersCreditAutomation:
                 await safe_screenshot(self.page, 'partnerscredit_after_email_select.png')
                 logger.info("Email delivery method selected - code sent to admin email")
             else:
-                logger.info("No delivery method selection page detected, continuing...")
+                logger.info("No delivery method selection page detected - MFA may not be required")
+                # No MFA triggered, skip auto-entry and manual wait
+                return
 
             # Record timestamp for email filtering
             from datetime import datetime, timezone
