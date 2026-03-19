@@ -25,7 +25,7 @@ logger = logging.getLogger('automation.vendors.partnerscredit')
 class PartnersCreditAutomation:
     """Handles Partners Credit user provisioning automation"""
 
-    def __init__(self, config_path: str, keyvault: KeyVaultService, api_key: Optional[str] = None):
+    def __init__(self, config_path: str, keyvault: KeyVaultService, api_key: Optional[str] = None, graph_client=None):
         """
         Initialize Partners Credit automation
 
@@ -33,9 +33,11 @@ class PartnersCreditAutomation:
             config_path: Path to vendor config.json
             keyvault: KeyVaultService instance for credential retrieval
             api_key: Anthropic API key for AI matching (optional)
+            graph_client: Optional GraphAPIClient for email-based MFA
         """
         self.config_path = Path(config_path)
         self.keyvault = keyvault
+        self.graph_client = graph_client
         self.config = self._load_config()
         self.title_mappings = self._load_title_mappings()
         self.ai_matcher = AIMatcherService(api_key=api_key)
@@ -320,6 +322,141 @@ class PartnersCreditAutomation:
         await safe_screenshot(self.page, 'partnerscredit_after_login.png')
         logger.info("Login completed")
 
+    async def _auto_enter_mfa_code(self, send_time: str = None) -> bool:
+        """
+        Attempt to automatically read OTP from nexus@ inbox and enter it.
+        Returns True on success, False on any failure (caller falls back to manual).
+        """
+        if not self.graph_client:
+            logger.info("No graph_client available - skipping auto MFA entry")
+            return False
+
+        from datetime import datetime, timezone
+        import re
+
+        mailbox = "nexus@highlandsmortgage.com"
+        if not send_time:
+            send_time = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+        logger.info(f"Attempting auto MFA code entry from {mailbox}")
+
+        # Initial delay - give the email time to arrive
+        await asyncio.sleep(10)
+
+        # Poll for OTP email (every 10s, up to 2 minutes)
+        max_attempts = 12
+        for attempt in range(max_attempts):
+            logger.info(f"Polling inbox for OTP email (attempt {attempt + 1}/{max_attempts})...")
+
+            messages = self.graph_client.read_recent_emails(
+                mailbox=mailbox,
+                since_timestamp=send_time
+            )
+
+            # Client-side filter: look for emails from Partners Credit
+            for msg in messages:
+                sender = msg.get('from', {}).get('emailAddress', {}).get('address', '').lower()
+                subject = (msg.get('subject') or '').lower()
+
+                if 'partnerscredit' not in sender and 'partners' not in subject:
+                    continue
+
+                # Extract 6-digit OTP from plain text body
+                body_text = msg.get('body', {}).get('content', '')
+                otp_match = re.search(r'\b(\d{6})\b', body_text)
+
+                if not otp_match:
+                    logger.info(f"Found Partners Credit email but no 6-digit code. Subject: {msg.get('subject')}")
+                    continue
+
+                otp_code = otp_match.group(1)
+                logger.info(f"Extracted OTP code: {otp_code}")
+
+                # Find the code input field
+                code_entered = False
+                code_selectors = [
+                    '#ContentPlaceHolder1_MFALoginControl1_DualAuthCodeView_tbPIN',
+                    'input[name*="tbPIN"]',
+                    'input[name*="code"]',
+                    'input[type="text"]',
+                    'input.form-control[type="text"]',
+                ]
+
+                for selector in code_selectors:
+                    try:
+                        element = await self.page.query_selector(selector)
+                        if element and await element.is_visible():
+                            await element.fill(otp_code)
+                            code_entered = True
+                            logger.info(f"Entered OTP code using selector: {selector}")
+                            break
+                    except Exception:
+                        continue
+
+                if not code_entered:
+                    logger.warning("Found OTP code but could not find input field")
+                    return False
+
+                await asyncio.sleep(1)
+                await safe_screenshot(self.page, 'partnerscredit_mfa_auto_code_entered.png')
+
+                # Click Submit/Verify button
+                submit_clicked = False
+                submit_selectors = [
+                    '#ContentPlaceHolder1_MFALoginControl1_DualAuthCodeView_btnSubmit',
+                    'input[value*="Submit"]',
+                    'button:has-text("Submit")',
+                    'input[value*="Verify"]',
+                    'button:has-text("Verify")',
+                ]
+
+                for selector in submit_selectors:
+                    try:
+                        btn = await self.page.query_selector(selector)
+                        if btn and await btn.is_visible():
+                            await btn.click()
+                            submit_clicked = True
+                            logger.info(f"Clicked submit using selector: {selector}")
+                            break
+                    except Exception:
+                        continue
+
+                if not submit_clicked:
+                    logger.warning("Entered OTP but could not find submit button")
+                    return False
+
+                await asyncio.sleep(3)
+                await safe_screenshot(self.page, 'partnerscredit_mfa_auto_submitted.png')
+
+                # Check if we reached the dashboard
+                success_indicators = [
+                    'text="Admin"',
+                    'text="Dashboard"',
+                    'a:has-text("Admin")',
+                    'a:has-text("Dashboard")'
+                ]
+
+                for indicator in success_indicators:
+                    try:
+                        element = await self.page.query_selector(indicator)
+                        if element and await element.is_visible():
+                            logger.info(f"Auto MFA completed - found: {indicator}")
+                            await safe_screenshot(self.page, 'partnerscredit_mfa_auto_complete.png')
+                            return True
+                    except Exception:
+                        continue
+
+                logger.warning("Auto MFA code submitted but dashboard not detected")
+                return False
+
+            # No matching email yet - wait and retry
+            if attempt < max_attempts - 1:
+                logger.info("OTP email not found yet, waiting 10s...")
+                await asyncio.sleep(10)
+
+        logger.warning(f"OTP email not found after {max_attempts} attempts - falling back to manual")
+        return False
+
     async def _handle_mfa(self):
         """Handle MFA: auto-select private computer, select email delivery, then wait for code entry"""
         logger.info("Handling MFA flow...")
@@ -368,6 +505,19 @@ class PartnersCreditAutomation:
                 logger.info("Email delivery method selected - code sent to admin email")
             else:
                 logger.info("No delivery method selection page detected, continuing...")
+
+            # Record timestamp for email filtering
+            from datetime import datetime, timezone
+            send_code_time = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+
+            # Try automatic OTP entry first
+            auto_success = await self._auto_enter_mfa_code(send_time=send_code_time)
+            if auto_success:
+                logger.info("MFA completed via automatic OTP entry")
+                return
+
+            # Auto-entry failed or unavailable - fall back to manual
+            logger.info("Falling back to manual MFA entry")
 
             # Step 3: Wait for user to enter the email verification code manually
             logger.info("Waiting for user to enter verification code from email...")
@@ -668,6 +818,7 @@ async def provision_user(
     user: EntraUser,
     config_path: str,
     api_key: Optional[str] = None,
+    graph_client=None,
     on_email_conflict: Optional[Callable[[str, str], Awaitable[Optional[str]]]] = None
 ) -> Dict[str, Any]:
     """
@@ -690,7 +841,7 @@ async def provision_user(
     keyvault = KeyVaultService()
 
     # Create automation instance with AI matcher support
-    automation = PartnersCreditAutomation(config_path, keyvault, api_key=api_key)
+    automation = PartnersCreditAutomation(config_path, keyvault, api_key=api_key, graph_client=graph_client)
 
     # Run automation with callback
     result = await automation.create_account(

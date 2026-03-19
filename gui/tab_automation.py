@@ -1485,6 +1485,7 @@ class AutomationStatusTab:
                 self.current_user,
                 str(config_path),
                 api_key=None,
+                graph_client=self.graph_client,
                 on_email_conflict=handle_email_conflict
             )
 
