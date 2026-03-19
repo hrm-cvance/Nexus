@@ -172,9 +172,8 @@ class PartnersCreditAutomation:
                 result['messages'].append("✓ User request submitted")
 
             result['success'] = True
-            result['warnings'].append("⚠ Manual step required: Check email for encrypted PDF with user credentials from Partners Credit")
             result['messages'].append("ℹ Partners Credit will send credentials via encrypted PDF email")
-            result['messages'].append("ℹ Use your Partners Credit admin password to decrypt the PDF")
+            result['messages'].append("ℹ Nexus will automatically unlock and post the PDF to the Partners Credit channel under Nexus-App in Microsoft Teams")
             logger.info(f"✓ Successfully submitted Partners Credit request for {user.display_name}")
 
         except Exception as e:
