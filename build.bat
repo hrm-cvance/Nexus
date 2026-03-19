@@ -9,7 +9,7 @@ echo.
 
 REM ── Configuration ──────────────────────────
 set APP_NAME=Nexus
-set APP_VERSION=1.0.3
+set APP_VERSION=1.1.0
 set ENTRY_POINT=main.py
 set DIST_DIR=dist
 set BUILD_DIR=build
