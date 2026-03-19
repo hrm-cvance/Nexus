@@ -33,7 +33,7 @@ if errorlevel 1 (
     )
 )
 
-set INTUNE_TOOL=C:\PrepTool\IntuneWinAppUtil.exe
+set INTUNE_TOOL=C:\Program Files\IntunePrepTool\IntuneWinAppUtil.exe
 set INTUNE_SOURCE=%DIST_DIR%\intune_source
 set INTUNE_OUTPUT=%DIST_DIR%\intune_output
 

@@ -113,7 +113,7 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - **Intune deployment scripts:** `deploy/install.ps1` and `deploy/uninstall.ps1` for Win32 app deployment
 - **Playwright browsers:** Shared path via `PLAYWRIGHT_BROWSERS_PATH` env var at `C:\ProgramData\Nexus\browsers`; `install.ps1` skips browser install if `chromium-*` directory already exists
 - **Config at runtime:** Bundled inside the exe; `config_manager.py` loads from `sys._MEIPASS` when frozen
-- **IntuneWinAppUtil location:** `C:\PrepTool\IntuneWinAppUtil.exe` (Microsoft Win32 Content Prep Tool)
+- **IntuneWinAppUtil location:** `C:\Program Files\IntunePrepTool\IntuneWinAppUtil.exe` (Microsoft Win32 Content Prep Tool)
 
 ### Icon & Window Identity
 - `assets/generate_icon.py` renders the N letterform using Segoe UI Bold font hinting at each size independently (not downscaled from SVG)

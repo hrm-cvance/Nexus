@@ -176,7 +176,7 @@ The 8-step build pipeline:
 5. Runs PyInstaller with icon, version info, and all hidden imports
 6. Verifies build output
 7. Assembles Intune source folder (`dist/intune_source/` with Nexus.exe + install.ps1 + uninstall.ps1)
-8. Runs `C:\PrepTool\IntuneWinAppUtil.exe` to create the `.intunewin` package
+8. Runs `C:\Program Files\IntunePrepTool\IntuneWinAppUtil.exe` to create the `.intunewin` package
 
 The exe embeds Windows file properties (right-click → Properties → Details): version number, company name, and product description. Version is maintained in one place (`APP_VERSION` in `main.py`) and flows to the window title bar, exe metadata, and Intune detection rules.
 
