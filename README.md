@@ -46,7 +46,7 @@ When a new employee joins, IT must create accounts on multiple third-party vendo
 | **Secure Credentials** | All vendor admin credentials stored in Azure Key Vault — never in code or config files |
 | **Intelligent Matching** | Uses Claude AI to map job titles to vendor-specific roles and branch codes |
 | **Duplicate Detection** | Detects existing accounts and prompts for resolution (skip or provide alternate) |
-| **MFA Handling** | Pauses for manual MFA completion when vendor sites require two-factor authentication |
+| **MFA Handling** | Automatically reads OTP codes from email and enters them; falls back to manual entry if needed |
 | **PDF Reports** | Generates provisioning summary reports for audit and record-keeping |
 
 ## Supported Vendors
@@ -55,7 +55,7 @@ When a new employee joins, IT must create accounts on multiple third-party vendo
 |---|---|---|
 | AccountChek | `accountchek.py` | Active |
 | BankVOD | `bankvod.py` | Active |
-| Certified Credit | `certifiedcredit.py` | Active |
+| Certified Credit | `certifiedcredit.py` | Disabled |
 | Clear Capital | `clearcapital.py` | Active |
 | DataVerify | `dataverify.py` | Active |
 | MMI | `mmi.py` | Active |
@@ -135,7 +135,7 @@ cp config/app_config.example.json config/app_config.json
     "tenant_id": "YOUR_AZURE_TENANT_ID",
     "client_id": "YOUR_AZURE_CLIENT_ID",
     "redirect_uri": "http://localhost:8400",
-    "scopes": ["User.Read.All", "GroupMember.Read.All", "Group.Read.All"]
+    "scopes": ["User.Read.All", "GroupMember.Read.All", "Group.Read.All", "Mail.Read.Shared"]
   },
   "azure_keyvault": {
     "vault_url": "https://YOUR-KEYVAULT-NAME.vault.azure.net/"
@@ -229,8 +229,64 @@ When a vendor reports that a username or email already exists, Nexus displays a 
 Some vendor portals require two-factor authentication. When MFA is detected, Nexus:
 
 1. Automatically clicks "Send Verification Code" (if applicable)
-2. Pauses automation and prompts the user to complete MFA in the browser
-3. Resumes automatically once MFA is completed
+2. Reads the OTP code from the `nexus@highlandsmortgage.com` inbox via Microsoft Graph API
+3. Enters the code and clicks Submit automatically
+4. Falls back to manual entry if auto-read fails (permissions, timeout, or unrecognized email format)
+
+Auto-MFA is supported for **TheWorkNumber** (Equifax) and **Partners Credit**. Other vendors with MFA (e.g., MMI) still require manual code entry.
+
+## Nexus Monitor
+
+Nexus Monitor is a standalone headless service that runs background automation tasks on a server. It is built and deployed separately from the main Nexus GUI app.
+
+### Overview
+
+| | Nexus App | Nexus Monitor |
+|---|---|---|
+| **Runs on** | Tech's workstation | Server |
+| **UI** | CustomTkinter GUI | Headless (console) |
+| **Auth** | Delegated (user sign-in) | Client credentials (client secret) |
+| **Deploy** | Intune (`Nexus.exe`) | Task Scheduler (`NexusMonitor.exe`) |
+
+### Current Jobs
+
+| Job | Interval | Description |
+|---|---|---|
+| Partners User List | 5 min | Fetches password-protected PDF from Partners Credit email, unlocks it, posts to Teams via Power Automate webhook |
+
+### Build & Deploy
+
+```bash
+# Build
+build_monitor.bat
+
+# Deploy (on server, as admin)
+powershell -ExecutionPolicy Bypass -File install_monitor.ps1
+```
+
+Files on the server (`C:\Scripts\NexusMonitor\`):
+- `NexusMonitor.exe` — the service
+- `monitor_config.json` — client secret, webhook URL, mailbox (not in source control)
+- `state.json` — tracks processed items (auto-created)
+- `logs/` — rotating log files
+
+### Configuration
+
+Copy `config/monitor_config.example.json` to `monitor_config.json` alongside the exe:
+
+```json
+{
+  "client_secret": "YOUR_CLIENT_SECRET",
+  "polling_interval_minutes": 5,
+  "teams_webhook_url": "YOUR_POWER_AUTOMATE_WEBHOOK_URL",
+  "monitor_mailbox": "nexus@highlandsmortgage.com"
+}
+```
+
+**Prerequisites:**
+- Client secret added to the Nexus app registration in Entra
+- `Mail.Read` application permission (admin consented)
+- Power Automate flow configured with HTTP trigger
 
 ## Adding a New Vendor
 
@@ -259,12 +315,16 @@ Each vendor requires secrets following this pattern:
 ```
 Nexus/
 ├── main.py                            # Entry point (supports --install-browsers for deployment)
+├── monitor.py                         # Nexus Monitor entry point (standalone polling service)
 ├── requirements.txt                   # Python dependencies
 ├── build.bat                          # Build + Intune packaging (8-step: preflight → build → .intunewin)
+├── build_monitor.bat                  # Build NexusMonitor.exe
 ├── version_info.py                    # Generates Windows exe version metadata from APP_VERSION
-├── deploy/                            # Intune deployment scripts
-│   ├── install.ps1
-│   └── uninstall.ps1
+├── deploy/                            # Deployment scripts
+│   ├── install.ps1                    # Nexus GUI — Intune install
+│   ├── uninstall.ps1                  # Nexus GUI — Intune uninstall
+│   ├── install_monitor.ps1            # Nexus Monitor — Task Scheduler install
+│   └── uninstall_monitor.ps1          # Nexus Monitor — Task Scheduler uninstall
 ├── assets/                            # Application assets
 │   ├── nexus.ico                      # Multi-size icon (16–256px, font-hinted N)
 │   ├── nexus.png                      # 256px reference PNG
@@ -272,7 +332,14 @@ Nexus/
 │   └── generate_icon.py               # Icon generation script (Segoe UI Bold + manual ICO binary)
 ├── config/                            # Application configuration
 │   ├── app_config.example.json        # Template (copy to app_config.json)
+│   ├── monitor_config.example.json    # Template for Nexus Monitor (copy to monitor_config.json)
 │   └── vendor_mappings.json           # Entra group → vendor automation mappings
+├── monitor/                           # Nexus Monitor service
+│   ├── auth.py                        # Client credentials authentication
+│   ├── runner.py                      # Job runner with interval polling
+│   ├── state.py                       # JSON state tracking
+│   └── jobs/
+│       └── partners_user_list.py      # Partners Credit PDF job
 ├── gui/                               # CustomTkinter GUI
 │   ├── main_window.py                 # Main window and tab container
 │   ├── tab_search.py                  # Entra ID user search
@@ -353,7 +420,7 @@ Automation logs are written to `%APPDATA%\Nexus\logs\` with the format `nexus_YY
 | Measure | Detail |
 |---|---|
 | **Credential Storage** | All vendor credentials stored in Azure Key Vault — never in source code or config files |
-| **Authentication** | Microsoft Entra ID with delegated permissions via MSAL (no service principals); persistent token cache at `%LOCALAPPDATA%\Nexus\` |
+| **Authentication** | GUI: Microsoft Entra ID with delegated permissions via MSAL; persistent token cache at `%LOCALAPPDATA%\Nexus\`. Monitor: client credentials flow (no user context) |
 | **Access Control** | RBAC-based Key Vault policies; users must hold **Key Vault Secrets User** role |
 | **Source Control** | `.gitignore` excludes secrets, screenshots, logs, and environment files |
 | **Observability** | Automation runs in non-headless Chromium so operators can monitor and intervene |

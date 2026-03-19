@@ -7,10 +7,10 @@ Nexus is an internal tool for Highland Mortgage Services that automates vendor a
 - **Language:** Python 3.8+
 - **GUI:** CustomTkinter (customtkinter)
 - **Browser Automation:** Playwright (async API, Chromium)
-- **Auth:** MSAL (Microsoft Authentication Library) with delegated permissions and persistent token cache
-- **Cloud:** Azure Key Vault, Microsoft Graph API
+- **Auth:** MSAL (Microsoft Authentication Library) — delegated permissions (GUI) and client credentials (Monitor)
+- **Cloud:** Azure Key Vault, Microsoft Graph API (users, groups, mail, attachments)
 - **AI:** Anthropic Claude (role/branch matching)
-- **PDF:** ReportLab (summary generation)
+- **PDF:** ReportLab (summary generation), pikepdf (PDF decryption)
 
 ## Running the App
 ```bash
@@ -20,11 +20,23 @@ python main.py
 ## Project Structure
 ```
 main.py                          # Entry point (supports --install-browsers for deployment)
+monitor.py                       # Nexus Monitor entry point (standalone polling service)
 build.bat                        # Build script → dist/Nexus.exe + dist/intune_output/install.intunewin
+build_monitor.bat                # Build script → dist/NexusMonitor.exe
 version_info.py                  # Generates Windows exe version metadata from APP_VERSION
+monitor/
+  __init__.py                    # Monitor package
+  auth.py                        # MSAL ConfidentialClientApplication (client credentials flow)
+  runner.py                      # Job runner with interval-based polling and timeouts
+  state.py                       # JSON state tracking (processed items)
+  jobs/
+    __init__.py                  # Job registry (explicit, not filesystem discovery)
+    partners_user_list.py        # Job: fetch PDF from email, unlock, post to Teams
 deploy/
   install.ps1                    # Intune install script (shared Playwright browser path)
   uninstall.ps1                  # Intune uninstall script
+  install_monitor.ps1            # Nexus Monitor install (Task Scheduler)
+  uninstall_monitor.ps1          # Nexus Monitor uninstall
 assets/
   nexus.ico                      # Multi-size icon (16–256px, font-hinted N)
   nexus.png                      # 256px reference PNG
@@ -63,6 +75,7 @@ Vendors/{VendorName}/
   roles.json                     # Role mappings (if applicable)
 config/
   app_config.example.json        # Template config (copy to app_config.json)
+  monitor_config.example.json    # Template config for Nexus Monitor (copy to monitor_config.json)
   vendor_mappings.json           # Entra group -> vendor automation mappings
 docs/                            # All documentation (auth guide, Key Vault setup, user guide, etc.)
 ```
@@ -120,6 +133,26 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - Vendor modules that call `KeyVaultService()` with no args get the already-initialized singleton instance
 - Call `KeyVaultService.reset()` when the user signs out/re-authenticates to clear the singleton and credential cache
 
+### Auto-MFA OTP Entry
+- TheWorkNumber and Partners Credit support automatic MFA code entry via email
+- `GraphAPIClient.read_recent_emails()` polls the `nexus@highlandsmortgage.com` inbox for OTP emails
+- OTP codes are extracted via regex (`\b(\d{6})\b`), entered into the MFA form, and submitted
+- Requires `Mail.Read.Shared` delegated permission and Full Access on the nexus@ mailbox
+- Falls back to manual entry if auto-entry fails (no email found, wrong code, missing permissions)
+- `graph_client` is plumbed from `MainWindow` → `AutomationStatusTab` → `provision_user()` → vendor automation class
+- `GraphAPIClient` accepts either `auth_service` + `scopes` (GUI) or a `token_provider` callable (Monitor)
+
+### Nexus Monitor
+Nexus Monitor is a standalone headless polling service (`monitor.py`) that runs on a server, separate from the GUI app:
+- **Auth:** MSAL `ConfidentialClientApplication` (client credentials flow, no user sign-in, no 90-day token expiry)
+- **Config:** `config/monitor_config.json` (gitignored) — contains client secret, webhook URL, mailbox
+- **Jobs:** Pluggable job framework in `monitor/jobs/`. Each job has `JOB_NAME`, `INTERVAL_MINUTES`, and `run(context)`
+- **State:** Tracks processed item IDs in `state.json` alongside the exe (capped at 500 per job)
+- **Build:** `build_monitor.bat` → `dist/NexusMonitor.exe` (separate from Nexus GUI build)
+- **Deploy:** `deploy/install_monitor.ps1` registers as a Windows Scheduled Task running as SYSTEM at startup
+- **First job:** `partners_user_list` — fetches password-protected PDF from email, unlocks with pikepdf + Key Vault password, POSTs to Teams via Power Automate webhook
+- Never commit `config/monitor_config.json` (contains client secret and webhook URL with API signature)
+
 ### PowerShell Script Encoding
 - `deploy/install.ps1` and `deploy/uninstall.ps1` MUST be saved with **UTF-8 BOM** encoding and **CRLF** line endings
 - Windows PowerShell 5.1 (used by Intune/SYSTEM context) defaults to ANSI without a BOM, which causes parse errors
@@ -132,7 +165,7 @@ Secrets follow the pattern: `{vendorname}-{key}` (e.g., `theworknumber-login-url
 - Some vendor sites use iframes (Appcues tours, MFA modals) - use `content_frame()` to access iframe content
 - Toast/snackbar error messages (e.g., `#snackbar.error`) need explicit detection after form submission
 - MMI uses `extensionAttribute2` from Entra ID as the NMLS number (`user.nmls_number`)
-- Experience.com is currently disabled in `vendor_mappings.json`
+- Experience.com and Certified Credit are currently disabled in `vendor_mappings.json`
 - Key Vault has 32 secrets total — see `docs/AZURE_KEYVAULT_SETUP.md` for the full inventory
 - When using Playwright `page.evaluate()`, pass user data as arguments — never interpolate via f-strings (injection risk):
   ```python
