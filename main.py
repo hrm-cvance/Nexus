@@ -25,7 +25,7 @@ from gui.main_window import NexusMainWindow
 
 # Application metadata
 APP_NAME = "Nexus"
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.1.0"
 
 
 def setup_application():
