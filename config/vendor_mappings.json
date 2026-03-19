@@ -48,7 +48,7 @@
       "vendor_logo": "Vendors/CertifiedCredit/logo.png",
       "vendor_config": "Vendors/CertifiedCredit/config.json",
       "automation_module": "automation.vendors.certifiedcredit",
-      "enabled": true
+      "enabled": false
     },
     {
       "entra_group_name": "PartnersCredit_Users",

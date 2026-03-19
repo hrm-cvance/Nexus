@@ -26,7 +26,12 @@ class StateManager:
         if state_dir:
             self.state_dir = Path(state_dir)
         else:
-            self.state_dir = Path(os.environ.get('PROGRAMDATA', 'C:\\ProgramData')) / 'NexusMonitor'
+            # Default to alongside the exe (or project root in dev)
+            import sys
+            if getattr(sys, 'frozen', False):
+                self.state_dir = Path(sys.executable).parent
+            else:
+                self.state_dir = Path(__file__).parent.parent
 
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.state_file = self.state_dir / 'state.json'

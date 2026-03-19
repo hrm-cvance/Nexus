@@ -11,7 +11,8 @@
     "scopes": [
       "User.Read.All",
       "GroupMember.Read.All",
-      "Group.Read.All"
+      "Group.Read.All",
+      "Mail.Read.Shared"
     ]
   },
   "azure_keyvault": {

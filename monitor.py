@@ -48,7 +48,11 @@ def setup_monitor_logging():
 
     # File handler
     try:
-        log_dir = Path(os.environ.get('PROGRAMDATA', 'C:\\ProgramData')) / 'NexusMonitor' / 'logs'
+        # Log alongside the exe (or project root in dev)
+        if getattr(sys, 'frozen', False):
+            log_dir = Path(sys.executable).parent / 'logs'
+        else:
+            log_dir = Path(__file__).parent / 'logs'
         log_dir.mkdir(parents=True, exist_ok=True)
         log_file = log_dir / f"nexus_monitor_{datetime.now().strftime('%Y%m%d')}.log"
 
