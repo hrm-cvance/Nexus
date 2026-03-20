@@ -18,7 +18,7 @@ JOB_NAME = "partners_user_list"
 INTERVAL_MINUTES = 5
 
 SENDER_FILTER = "support@partnerscredit.com"
-SUBJECT_FILTER = "Partners User List"
+SUBJECT_FILTER = "User List"
 KEYVAULT_PASSWORD_SECRET = "partnerscredit-admin-password"
 
 
@@ -38,7 +38,7 @@ def run(context):
     messages = context.graph_client.read_recent_emails(
         mailbox=mailbox,
         subject_filter=SUBJECT_FILTER,
-        minutes_ago=1440,
+        minutes_ago=4320,  # 3 days — state tracking prevents reprocessing
         max_results=50
     )
 

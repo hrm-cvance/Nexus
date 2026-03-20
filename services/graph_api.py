@@ -334,14 +334,9 @@ class GraphAPIClient:
         """
         logger.info(f"Getting attachments for message {message_id[:20]}...")
 
-        params = {
-            "$select": "id,name,contentType,contentBytes"
-        }
-
         try:
             response = self._make_request(
-                "GET", f"/users/{mailbox}/messages/{message_id}/attachments",
-                params=params
+                "GET", f"/users/{mailbox}/messages/{message_id}/attachments"
             )
             attachments = response.get("value", [])
             logger.info(f"Found {len(attachments)} attachment(s)")
