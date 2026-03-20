@@ -140,6 +140,9 @@ def main():
     from monitor.jobs import ALL_JOBS
     from monitor.runner import JobRunner, JobContext
 
+    # Store auth reference in config so jobs can get fresh tokens for direct API calls
+    monitor_config['_auth'] = auth
+
     context = JobContext(
         graph_client=graph_client,
         keyvault=keyvault,
